@@ -3,7 +3,7 @@ namespace: company.svim
 description: "Router que decide o caminho e executa tarefas Python"
 
 inputs:
-  - name: intent
+  - id: intent
     type: STRING
     required: true
 
