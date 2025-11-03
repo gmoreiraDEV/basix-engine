@@ -1,0 +1,35 @@
+id: svim_router_flow
+namespace: company.svim
+description: "Router que decide o caminho e executa tarefas Python"
+
+inputs:
+  - name: intent
+    type: STRING
+    required: true
+
+tasks:
+  - id: switch
+    type: io.kestra.plugin.core.flow.Switch
+    value: "{{ inputs.intent | upper }}"
+    cases:
+      SERVICE:
+        - id: service_task
+          type: io.kestra.plugin.scripts.python.Commands
+          commands: 
+            - python workflows/svim_router_flow/tasks/service_task.py
+      PROFESSIONAL:
+        - id: professional_task
+          type: io.kestra.plugin.scripts.python.Commands
+          commands: 
+            - python workflows/svim_router_flow/tasks/professional_task.py
+      SCHEDULE:
+        - id: schedule_task
+          type: io.kestra.plugin.scripts.python.Commands
+          commands: 
+            - python workflows/svim_router_flow/tasks/schedule_task.py
+            
+    defaults:
+      - id: default_task
+        type: io.kestra.plugin.scripts.python.Script
+        script: |
+          print("Intenção não reconhecida. Peça mais detalhes ao cliente.")
