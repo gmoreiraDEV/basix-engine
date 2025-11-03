@@ -1,0 +1,12 @@
+id: svim_brain
+namespace: company.svim
+
+tasks:
+  - id: greetings
+    type: io.kestra.plugin.scripts.python.Commands
+    namespaceFiles:
+      enabled: true
+    beforeCommands:
+      - pip install -r requirements.txt
+    commands:
+      - python workflows/svim_brain/tasks/svim_greetings.py
