@@ -15,17 +15,29 @@ tasks:
       SERVICE:
         - id: service_task
           type: io.kestra.plugin.scripts.python.Commands
-          commands: 
+          namespaceFiles:
+            enabled: true
+          beforeCommands:
+            - pip install -r requirements.txt
+          commands:
             - python workflows/svim_router_flow/tasks/service_task.py
       PROFESSIONAL:
         - id: professional_task
           type: io.kestra.plugin.scripts.python.Commands
-          commands: 
+          namespaceFiles:
+            enabled: true
+          beforeCommands:
+            - pip install -r requirements.txt
+          commands:
             - python workflows/svim_router_flow/tasks/professional_task.py
       SCHEDULE:
         - id: schedule_task
           type: io.kestra.plugin.scripts.python.Commands
-          commands: 
+          namespaceFiles:
+            enabled: true
+          beforeCommands:
+            - pip install -r requirements.txt
+          commands:
             - python workflows/svim_router_flow/tasks/schedule_task.py
             
     defaults:
