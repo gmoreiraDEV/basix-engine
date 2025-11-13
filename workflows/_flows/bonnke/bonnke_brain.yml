@@ -1,0 +1,12 @@
+id: bonnke_brain
+namespace: company.bonnke
+
+tasks:
+  - id: greetings
+    type: io.kestra.plugin.scripts.python.Commands
+    namespaceFiles:
+      enabled: true
+    beforeCommands:
+      - pip install -r workflows/bonnke/brain/tasks/requirements.txt
+    commands:
+      - python workflows/bonnke/brain/tasks/greetings.py
