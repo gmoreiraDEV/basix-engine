@@ -16,4 +16,4 @@ tasks:
       - pip install -r brain/tasks/requirements.txt 
   
     commands:
-      - python greetings.py
+      - python brain/tasks/greetings.py
