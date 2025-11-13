@@ -3,7 +3,7 @@ namespace: company.bonnke
 
 tasks:
   - id: run_greetings
-    type: io.kestra.plugin.scripts.python.Scripts
+    type: io.kestra.plugin.scripts.python.Script
     containerImage: python:3.11
     namespaceFiles:
       enabled: true
