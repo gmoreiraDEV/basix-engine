@@ -13,7 +13,7 @@ tasks:
     beforeCommands:
       - pwd
       - ls -R
-      - pip install -r requirements.txt 
+      - pip install -r brain/tasks/requirements.txt 
   
     commands:
       - python greetings.py
