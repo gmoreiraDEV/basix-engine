@@ -2,11 +2,23 @@ id: bonnke_brain
 namespace: company.bonnke
 
 tasks:
-  - id: greetings
-    type: io.kestra.plugin.scripts.python.Commands
+  - id: run_greetings
+    type: io.kestra.plugin.scripts.python.Scripts
+    containerImage: python:3.11
     namespaceFiles:
       enabled: true
+      directory: workflows/bonnke/brain/tasks
     beforeCommands:
       - pip install -r workflows/bonnke/brain/tasks/requirements.txt
-    commands:
-      - python workflows/bonnke/brain/tasks/greetings.py
+    script: |
+      import sys
+      import json
+      from pathlib import Path
+  
+      sys.path.insert(0, str(Path(".").resolve()))
+  
+      import greetings
+  
+      if __name__ == "__main__":
+          result = greetings.run()
+          print(json.dumps({"result": result}, ensure_ascii=False))
