@@ -1,12 +1,19 @@
 id: bonnke_brain
 namespace: company.bonnke
+description: "Fluxo do brain do Bonnke (Jeolsi)"
 
 tasks:
-  - id: greetings
+  - id: run_greetings
     type: io.kestra.plugin.scripts.python.Commands
+    containerImage: python:3.11
     namespaceFiles:
       enabled: true
+      directory: workflows/bonnke/brain/tasks
+      
     beforeCommands:
-      - pip install -r workflows/bonnke/brain/tasks/requirements.txt
+      - pwd
+      - ls -R
+      - pip install -r brain/tasks/requirements.txt 
+  
     commands:
-      - python workflows/bonnke/brain/tasks/greetings.py
+      - python brain/tasks/greetings.py
