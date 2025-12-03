@@ -1,6 +1,22 @@
 id: svim_brain
 namespace: company.svim
 
+inputs:
+  - id: message
+    type: STRING
+  - id: user_id
+    type: STRING
+    defaults: anonymous
+  - id: session_id
+    type: STRING
+    required: false
+  - id: customer_profile
+    type: JSON
+    required: false
+  - id: policies_context
+    type: JSON
+    required: false
+
 tasks:
   - id: agent
     type: io.kestra.plugin.scripts.python.Commands
@@ -8,5 +24,12 @@ tasks:
       enabled: true
     beforeCommands:
       - pip install -r requirements.txt
+    env:
+    env:
+      SVIM_MESSAGE: "{{ inputs.message }}"
+      SVIM_USER_ID: "{{ inputs.user_id }}"
+      SVIM_SESSION_ID: "{{ inputs.session_id }}"
+      SVIM_CUSTOMER_PROFILE: "{{ inputs.customer_profile | toJson }}"
+      SVIM_POLICIES_CONTEXT: "{{ inputs.policies_context | toJson }}"
     commands:
       - python workflows/svim/agent/main.py

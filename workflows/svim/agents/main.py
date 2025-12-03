@@ -1,55 +1,60 @@
 import os
-from dotenv import load_dotenv
+import json
+import asyncio
+from typing import Any, Dict, Optional
 
-from langchain_openai import ChatOpenAI
-from langchain.agents import create_agent
-from langchain_core.messages import HumanMessage
-
-from tools.index import tools
-
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+from agents.maria import create_svim_agent
+from agents.infra import create_session_factory
 
 
-model = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=1,
-    api_key=OPENAI_API_KEY,
-)
+def _load_json_env(name: str) -> Dict[str, Any]:
+    raw = os.environ.get(name)
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except Exception:
+        # se vier lixo, ignora e segue a vida
+        return {}
 
 
-system_prompt = """
-Você é uma recepcionista na SVIM PAMPLONA, seu objetivo é captar informações do cliente e criar uma agendamento de horário para ele.
-Use a ferramenta create_schedule para criar a agenda assim que conseguir todos os dados.
-Você é uma mulher simpática e proativa então sempre tenha essa personalidade.
-"""
+async def run_once() -> Dict[str, Any]:
+    message = os.environ.get("SVIM_MESSAGE", "").strip()
+    user_id = os.environ.get("SVIM_USER_ID", "anonymous")
+    session_id = os.environ.get("SVIM_SESSION_ID") or None
 
+    customer_profile = _load_json_env("SVIM_CUSTOMER_PROFILE")
+    policies_context = _load_json_env("SVIM_POLICIES_CONTEXT")
 
-agent = create_agent(
-        model=model,
-        tools=tools,
-        system_prompt=system_prompt,
-)
+    if not message:
+        raise ValueError("SVIM_MESSAGE não foi definido nas variáveis de ambiente")
+
+    # cria sessão de DB (usa DATABASE_URL do ambiente)
+    SessionFactory = create_session_factory()
+    db_session = SessionFactory()
+
+    try:
+        agent = create_svim_agent(db_session=db_session)
+
+        result = await agent.process(
+            {
+                "message": message,
+                "session_id": session_id,
+                "customer_profile": customer_profile,
+                "policies_context": policies_context,
+            },
+            user_id=user_id,
+        )
+
+        return result
+    finally:
+        db_session.close()
 
 
 def main():
-    print("Agente LangGraph + OPENAI + Tools iniciado. Digite 'sair' para encerrar.\n")
-
-    while True:
-        user_input = input("Você: ").strip()
-        if not user_input:
-            continue
-
-        if user_input.lower() in {"sair", "exit", "quit"}:
-            print("Encerrando...")
-            break
-
-        result = agent.invoke(
-            {"messages": [HumanMessage(content=user_input)]}
-        )
-
-        ai_message = result["messages"][-1]
-        print(f"Agente: {ai_message.content}\n")
+    result = asyncio.run(run_once())
+    # devolve JSON pro stdout (Kestra captura se precisar)
+    print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == "__main__":
