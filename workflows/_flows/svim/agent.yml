@@ -31,4 +31,4 @@ tasks:
       SVIM_CUSTOMER_PROFILE: "{{ inputs.customer_profile | toJson }}"
       SVIM_POLICIES_CONTEXT: "{{ inputs.policies_context | toJson }}"
     commands:
-      - python workflows/svim/agent/main.py
+      - python agents/main.py
