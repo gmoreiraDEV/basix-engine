@@ -25,7 +25,6 @@ tasks:
     beforeCommands:
       - pip install -r requirements.txt
     env:
-    env:
       SVIM_MESSAGE: "{{ inputs.message }}"
       SVIM_USER_ID: "{{ inputs.user_id }}"
       SVIM_SESSION_ID: "{{ inputs.session_id }}"
