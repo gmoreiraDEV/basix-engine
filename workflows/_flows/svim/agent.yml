@@ -30,9 +30,9 @@ tasks:
       SVIM_SESSION_ID: "{{ inputs.session_id }}"
       SVIM_CUSTOMER_PROFILE: "{{ inputs.customer_profile | toJson }}"
       SVIM_POLICIES_CONTEXT: "{{ inputs.policies_context | toJson }}"
-      QDRANT_URL: {{ kv('QDRANT_URL') }}
-      QDRANT_API_KEY: {{ kv('QDRANT_API_KEY') }}
-      DATABASE_URL: {{ kv('SVIM_DB_URL') }}
-      OPENAI_API_KEY: {{ kv('SVIM_OPENAI_API_KEY') }}
+      QDRANT_URL: "{{ kv('QDRANT_URL') }}"
+      QDRANT_API_KEY: "{{ kv('QDRANT_API_KEY') }}"
+      DATABASE_URL: "{{ kv('SVIM_DB_URL') }}"
+      OPENAI_API_KEY: "{{ kv('SVIM_OPENAI_API_KEY') }}"
     commands:
       - python agents/main.py
