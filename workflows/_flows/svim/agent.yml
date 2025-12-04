@@ -26,7 +26,7 @@ tasks:
         - agents/*
         - agents/tools/*
     beforeCommands:
-      - pip install -r requirements.txt
+      - pip install -r agents/requirements.txt
     env:
       SVIM_MESSAGE: "{{ inputs.message }}"
       SVIM_USER_ID: "{{ inputs.user_id }}"
