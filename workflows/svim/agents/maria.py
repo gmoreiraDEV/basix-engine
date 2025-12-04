@@ -1,4 +1,3 @@
-# agents/svim/main.py
 """
 💇‍♀️ SVIM Agent - Maria (Recepcionista / Atendimento)
 
@@ -27,7 +26,7 @@ from typing import Any, Dict, List, Optional
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
-# Infra do projeto (ajuste caminhos se necessário)
+from sqlalchemy.orm import Session
 from qdrant_client import QdrantClient
 from agents.infra import (
     create_qdrant_client,
@@ -38,9 +37,6 @@ from agents.infra import (
 from agents.llm_client import LLMClient
 from agents.vector_store import SVIMVectorStore
 from agents.base_agent import BaseAgent
-
-# DB (caso queira logar métricas / histórico depois)
-from sqlalchemy.orm import Session
 
 # Prompts da SVIM
 from agents.prompts import SVIMPrompts

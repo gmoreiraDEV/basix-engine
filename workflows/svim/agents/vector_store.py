@@ -1,8 +1,9 @@
+import uuid
 from typing import Any, Dict, List, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
+
 from agents.embeddings import EmbeddingClient
-import uuid
 
 class SVIMVectorStore:
     def __init__(self, client: QdrantClient, collection: str):

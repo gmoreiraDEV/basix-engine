@@ -3,7 +3,7 @@ import json
 import sys
 from typing import Any, Dict
 
-from workflows.svim.agents.maria import create_svim_agent
+from agents.maria import create_svim_agent
 from agents.infra import create_session_factory
 
 
