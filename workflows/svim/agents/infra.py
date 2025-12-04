@@ -1,7 +1,6 @@
-# agents/svim/infra.py
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from qdrant_client import QdrantClient
@@ -42,20 +41,27 @@ def ensure_qdrant_collection(
     vector_size: int = 1536,
     distance: Distance = Distance.COSINE,
 ) -> None:
-    """
-    Garante que a collection exista no Qdrant.
-    Se não existir, cria com vector_size informado.
-    """
     collections = client.get_collections()
     existing = {c.name for c in collections.collections}
 
-    if collection_name in existing:
-        return
+    if collection_name not in existing:
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=vector_size, distance=distance),
+        )
 
-    client.create_collection(
-        collection_name=collection_name,
-        vectors_config=VectorParams(size=vector_size, distance=distance),
-    )
+    try:
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name="user_id",
+            field_schema={"type": "keyword"},
+        )
+    except Exception as e:
+        if "already exists" in str(e).lower():
+            pass
+        else:
+            print(f"Qdrant index error: {e}")
+
 
 
 # ==================== POSTGRES / SQLALCHEMY ====================
@@ -109,15 +115,14 @@ def log_svim_interaction(
         "intent": intent,
         "request_json": json.dumps(request),
         "response_json": json.dumps(response),
-        "created_at": datetime.now(datetime.timezone.utc).isoformat(),
     }
 
     session.execute(
-        text("""
-            INSERT INTO interaction_logs
-                (user_id, session_id, intent, request_json, response_json, created_at)
-            VALUES
-                (:user_id, :session_id, :intent, :request_json, :response_json, NOW())
+    text("""
+        INSERT INTO interaction_logs
+            (user_id, session_id, intent, request_json, response_json, created_at)
+        VALUES
+            (:user_id, :session_id, :intent, :request_json, :response_json, NOW())
         """),
         payload,
     )

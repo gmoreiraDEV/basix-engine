@@ -361,6 +361,14 @@ class SVIMAgent(BaseAgent):
             config = {"configurable": {"thread_id": state.session_id}}
             result: SVIMState = await self.workflow.ainvoke(state, config=config)
 
+            if not isinstance(result, SVIMState):
+                logger.error(f"[SVIM] Invalid workflow result: {result}")
+                return {
+                    "success": False,
+                    "error": "Invalid workflow output",
+                    "response": "Tive um probleminha técnico interno, pode tentar novamente por favor?",
+                }
+
             assistant_message = next(
                 (msg for msg in reversed(result.messages) if msg.get("role") == "assistant"),
                 None,
