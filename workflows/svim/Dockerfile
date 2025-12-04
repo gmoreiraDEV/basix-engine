@@ -6,11 +6,11 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Copia requirements e instala deps
-COPY ./agents/requirements.txt .
+COPY workflows/svim/agents/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia o código do agente
-COPY agents ./agents
+COPY workflows/svim/agents ./agents
 
 # Garante que /app está no PYTHONPATH
 ENV PYTHONPATH=/app

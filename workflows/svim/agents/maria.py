@@ -311,7 +311,6 @@ class SVIMAgent(BaseAgent):
         return "\n".join(formatted)
 
     # ==================== API Pública ====================
-
     async def process_message(
         self,
         user_id: str,
@@ -359,10 +358,39 @@ class SVIMAgent(BaseAgent):
             )
 
             config = {"configurable": {"thread_id": state.session_id}}
-            result: SVIMState = await self.workflow.ainvoke(state, config=config)
 
+            # Chama o workflow do LangGraph
+            workflow_result = await self.workflow.ainvoke(state, config=config)
+
+            # Quando usamos MemorySaver, o LangGraph costuma devolver um dict serializado.
+            # Aqui reconstruímos o SVIMState a partir desse dict, se for o caso.
+            if isinstance(workflow_result, dict):
+                raw_intent = workflow_result.get("intent", SVIMIntent.UNKNOWN)
+
+                if isinstance(raw_intent, SVIMIntent):
+                    intent = raw_intent
+                else:
+                    try:
+                        intent = SVIMIntent(raw_intent)
+                    except Exception:
+                        intent = SVIMIntent.UNKNOWN
+
+                result = SVIMState(
+                    messages=workflow_result.get("messages", []),
+                    user_id=workflow_result.get("user_id", user_id),
+                    session_id=workflow_result.get("session_id", state.session_id),
+                    intent=intent,
+                    customer_profile=workflow_result.get("customer_profile", {}),
+                    appointment_context=workflow_result.get("appointment_context", {}),
+                    policies_context=workflow_result.get("policies_context", {}),
+                    needs_handoff=workflow_result.get("needs_handoff", False),
+                )
+            else:
+                result = workflow_result
+
+            # Defesa extra: se ainda assim não for SVIMState, retorna erro amigável
             if not isinstance(result, SVIMState):
-                logger.error(f"[SVIM] Invalid workflow result: {result}")
+                logger.error(f"[SVIM] Invalid workflow result type: {type(result)} - value: {result}")
                 return {
                     "success": False,
                     "error": "Invalid workflow output",
@@ -391,6 +419,7 @@ class SVIMAgent(BaseAgent):
                 "error": str(e),
                 "response": "Tive um erro aqui do meu lado, mas quero te ajudar. Pode tentar novamente por favor?",
             }
+
 
     async def process(self, input_data: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
         """

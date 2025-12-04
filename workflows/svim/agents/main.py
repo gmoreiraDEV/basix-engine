@@ -1,10 +1,13 @@
 import os
 import json
 import asyncio
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from agents.maria import create_svim_agent
 from agents.infra import create_session_factory
+
+from dotenv import load_dotenv
+load_dotenv()
 
 
 def _load_json_env(name: str) -> Dict[str, Any]:
