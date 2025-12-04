@@ -23,11 +23,40 @@ tasks:
     containerImage: gmoreiradev/svim-agent:latest
     
     env:
-      SVIM_MESSAGE: "{{ inputs.message }}"
-      SVIM_USER_ID: "{{ inputs.user_id }}"
-      SVIM_SESSION_ID: "{{ inputs.session_id }}"
-      SVIM_CUSTOMER_PROFILE: "{{ inputs.customer_profile | toJson }}"
-      SVIM_POLICIES_CONTEXT: "{{ inputs.policies_context | toJson }}"
+      SVIM_MESSAGE: >-
+        {{ trigger.variables.message
+           | default(trigger.body.message)
+           | default(inputs.message) }}
+
+      SVIM_USER_ID: >-
+        {{ trigger.variables.user_id
+           | default(trigger.body.user_id)
+           | default(inputs.user_id)
+           | default('anonymous') }}
+
+      SVIM_SESSION_ID: >-
+        {{ trigger.variables.session_id
+           | default(trigger.body.session_id)
+           | default(inputs.session_id) }}
+
+      SVIM_CUSTOMER_PROFILE: >-
+        {{
+          (trigger.variables.customer_profile
+            | default(trigger.body.customer_profile)
+            | default(inputs.customer_profile)
+            | default({}))
+          | toJson
+        }}
+
+      SVIM_POLICIES_CONTEXT: >-
+        {{
+          (trigger.variables.policies_context
+            | default(trigger.body.policies_context)
+            | default(inputs.policies_context)
+            | default({}))
+          | toJson
+        }}
+
       QDRANT_URL: "{{ kv('QDRANT_URL') }}"
       QDRANT_API_KEY: "{{ kv('QDRANT_API_KEY') }}"
       DATABASE_URL: "{{ kv('SVIM_DB_URL') }}"
@@ -37,3 +66,16 @@ tasks:
       - "python"
       - "-m"
       - "agents.main"
+
+triggers:
+  - id: webhook
+    type: io.kestra.plugin.core.trigger.Webhook
+    key: svim-maria
+    wait: true         
+    returnOutputs: true
+    variables:
+      message: "{{ trigger.body.message }}"
+      user_id: "{{ trigger.body.user_id }}"
+      session_id: "{{ trigger.body.session_id }}"
+      customer_profile: "{{ trigger.body.customer_profile }}"
+      policies_context: "{{ trigger.body.policies_context }}"
