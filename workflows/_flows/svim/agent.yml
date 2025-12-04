@@ -32,5 +32,8 @@ tasks:
       QDRANT_API_KEY: "{{ kv('QDRANT_API_KEY') }}"
       DATABASE_URL: "{{ kv('SVIM_DB_URL') }}"
       OPENAI_API_KEY: "{{ kv('SVIM_OPENAI_API_KEY') }}"
+      
     commands:
-      - python -m agents.main
+      - "python"
+      - "-m"
+      - "agents.main"
