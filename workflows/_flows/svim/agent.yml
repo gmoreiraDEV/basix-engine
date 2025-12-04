@@ -23,8 +23,8 @@ tasks:
     namespaceFiles:
       enabled: true
       include:
-        - agents/*
-        - agents/tools/*
+        - agents/main.py
+        - agents/maria.py
     beforeCommands:
       - pip install -r agents/requirements.txt
     env:
