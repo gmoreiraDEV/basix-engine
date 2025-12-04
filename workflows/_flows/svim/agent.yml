@@ -25,6 +25,7 @@ tasks:
       include:
         - agents/main.py
         - agents/maria.py
+        - agents/requirements.txt
     beforeCommands:
       - pip install -r agents/requirements.txt
     env:
