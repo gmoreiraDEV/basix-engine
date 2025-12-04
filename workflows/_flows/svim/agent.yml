@@ -22,6 +22,9 @@ tasks:
     type: io.kestra.plugin.scripts.python.Commands
     namespaceFiles:
       enabled: true
+      include:
+        - agents/*
+        - agents/tools/*
     beforeCommands:
       - pip install -r requirements.txt
     env:
