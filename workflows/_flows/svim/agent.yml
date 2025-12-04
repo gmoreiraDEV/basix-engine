@@ -20,7 +20,7 @@ inputs:
 tasks:
   - id: agent
     type: io.kestra.plugin.docker.Run
-    image: SEU_REGISTRO/svim-agent:latest
+    image: gmoreiradev/svim-agent:latest
     
     env:
       SVIM_MESSAGE: "{{ inputs.message }}"
