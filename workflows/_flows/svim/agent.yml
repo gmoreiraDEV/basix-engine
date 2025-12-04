@@ -19,15 +19,9 @@ inputs:
 
 tasks:
   - id: agent
-    type: io.kestra.plugin.scripts.python.Commands
-    namespaceFiles:
-      enabled: true
-      include:
-        - agents/main.py
-        - agents/maria.py
-        - agents/requirements.txt
-    beforeCommands:
-      - pip install -r agents/requirements.txt
+    type: io.kestra.plugin.docker.Run
+    image: SEU_REGISTRO/svim-agent:latest
+    
     env:
       SVIM_MESSAGE: "{{ inputs.message }}"
       SVIM_USER_ID: "{{ inputs.user_id }}"
@@ -39,4 +33,4 @@ tasks:
       DATABASE_URL: "{{ kv('SVIM_DB_URL') }}"
       OPENAI_API_KEY: "{{ kv('SVIM_OPENAI_API_KEY') }}"
     commands:
-      - python agents/main.py
+      - python -m agents.main
