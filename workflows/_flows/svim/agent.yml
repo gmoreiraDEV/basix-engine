@@ -7,11 +7,11 @@ tasks:
     containerImage: gmoreiradev/svim-agent:latest
     
     env:
-      SVIM_MESSAGE: "{{ trigger.variables.body.message }}"
-      SVIM_USER_ID: "{{ trigger.variables.body.user_id }}"
-      SVIM_SESSION_ID: "{{ trigger.variables.body.session_id }}"
-      SVIM_CUSTOMER_PROFILE: "{{ trigger.variables.body.customer_profile }}"
-      SVIM_POLICIES_CONTEXT: "{{ trigger.variables.body.policies_context }}"
+      SVIM_MESSAGE: "{{ trigger.body.message }}"
+      SVIM_USER_ID: "{{ trigger.body.user_id }}"
+      SVIM_SESSION_ID: "{{ trigger.body.session_id }}"
+      SVIM_CUSTOMER_PROFILE: "{{ trigger.body.customer_profile }}"
+      SVIM_POLICIES_CONTEXT: "{{ trigger.body.policies_context }}"
       QDRANT_URL: "{{ kv('QDRANT_URL') }}"
       QDRANT_API_KEY: "{{ kv('QDRANT_API_KEY') }}"
       DATABASE_URL: "{{ kv('SVIM_DB_URL') }}"
