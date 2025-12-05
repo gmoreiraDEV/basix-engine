@@ -18,7 +18,7 @@ Arquitetura:
 
 import os
 import logging
-from dataclasses import dataclass
+from typing import TypedDict
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -56,8 +56,7 @@ class SVIMIntent(Enum):
     UNKNOWN = "unknown"         # Não identificado
 
 
-@dataclass
-class SVIMState:
+class SVIMState(TypedDict):
     """
     Estado da conversa da SVIM dentro do LangGraph.
     """
@@ -68,7 +67,7 @@ class SVIMState:
     customer_profile: Dict[str, Any]
     appointment_context: Dict[str, Any]
     policies_context: Dict[str, Any]
-    needs_handoff: bool = False  # Se precisa passar pra humano
+    needs_handoff: bool
 
 
 # ==================== Agente Principal ====================
@@ -172,15 +171,15 @@ class SVIMAgent(BaseAgent):
         """
         try:
             user_context = await self.vector_store.get_user_context(
-                user_id=state.user_id,
+                user_id=state["user_id"],
                 k=self.max_context_messages,
             )
 
             # Monta um texto simples de contexto
             history_text = self._format_messages(user_context)
-            state.appointment_context["history"] = history_text
+            state["appointment_context"]["history"] = history_text
 
-            logger.info(f"[SVIM] Context loaded for user {state.user_id}: {len(user_context)} messages")
+            logger.info(f"[SVIM] Context loaded for user {state['user_id']}: {len(user_context)} messages")
         except Exception as e:
             logger.error(f"[SVIM] Error loading context: {e}")
 
@@ -193,7 +192,7 @@ class SVIMAgent(BaseAgent):
         """
         try:
             last_message = ""
-            for msg in reversed(state.messages):
+            for msg in reversed(state["messages"]):
                 if msg.get("role") == "user":
                     last_message = msg.get("content", "")
                     break
@@ -214,11 +213,11 @@ class SVIMAgent(BaseAgent):
             elif any(word in text for word in ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "tudo bem"]):
                 intent = SVIMIntent.SMALLTALK
 
-            state.intent = intent
-            logger.info(f"[SVIM] Detected intent for user {state.user_id}: {intent.value}")
+            state["intent"] = intent
+            logger.info(f"[SVIM] Detected intent for user {state['user_id']}: {intent.value}")
         except Exception as e:
             logger.error(f"[SVIM] Error detecting intent: {e}")
-            state.intent = SVIMIntent.UNKNOWN
+            state["intent"] = SVIMIntent.UNKNOWN
 
         return state
 
@@ -229,16 +228,16 @@ class SVIMAgent(BaseAgent):
         """
         try:
             # Monta contexto para os prompts (histórico + perfil básico)
-            history = state.appointment_context.get("history", "")
-            customer_name = state.customer_profile.get("name") or state.customer_profile.get("nome") or "cliente"
+            history = state["appointment_context"].get("history", "")
+            customer_name = state["customer_profile"].get("name") or state["customer_profile"].get("nome") or "cliente"
             base_context = f"Histórico recente:\n{history}\n\nCliente: {customer_name}"
 
             # Escolhe prompt
-            if state.intent in [SVIMIntent.SCHEDULE, SVIMIntent.RESCHEDULE, SVIMIntent.CANCEL]:
+            if state["intent"] in [SVIMIntent.SCHEDULE, SVIMIntent.RESCHEDULE, SVIMIntent.CANCEL]:
                 system_prompt = self.prompts.get_scheduling_prompt(base_context)
-            elif state.intent == SVIMIntent.INFO:
+            elif state["intent"] == SVIMIntent.INFO:
                 # Aqui podemos incluir policies_context como contexto dinâmico
-                policies = state.policies_context.get("policies_text", "")
+                policies = state["policies_context"].get("policies_text", "")
                 context = f"{base_context}\n\nPolíticas e informações extras:\n{policies}"
                 system_prompt = self.prompts.get_policy_prompt(context)
             else:
@@ -247,7 +246,7 @@ class SVIMAgent(BaseAgent):
 
             # Prepara mensagens pro LLM
             # Nunca mandar o estado completo, só o que for necessário
-            recent_messages = state.messages[-5:]
+            recent_messages = state["messages"][-5:]
 
             response_text = await self.llm_client.chat_completion(
                 messages=recent_messages,
@@ -256,16 +255,16 @@ class SVIMAgent(BaseAgent):
                 max_tokens=350,
             )
 
-            state.messages.append({
+            state["messages"].append({
                 "role": "assistant",
                 "content": response_text,
                 "timestamp": datetime.now().isoformat(),
             })
 
-            logger.info(f"[SVIM] Response generated successfully for user {state.user_id}")
+            logger.info(f"[SVIM] Response generated successfully for user {state['user_id']}")
         except Exception as e:
             logger.error(f"[SVIM] Error generating response: {e}")
-            state.messages.append({
+            state["messages"].append({
                 "role": "assistant",
                 "content": "Tive um probleminha técnico aqui, mas estou à disposição para te ajudar. Pode repetir sua pergunta ou pedido, por favor?",
                 "timestamp": datetime.now().isoformat(),
@@ -279,14 +278,14 @@ class SVIMAgent(BaseAgent):
         """
         try:
             await self.vector_store.add_conversation(
-                user_id=state.user_id,
-                session_id=state.session_id,
-                messages=state.messages[-2:],  # últimas mensagens (user + Maria)
+                user_id=state["user_id"],
+                session_id=state["session_id"],
+                messages=state["messages"][-2:],  # últimas mensagens (user + Maria)
                 metadata={
-                    "intent": state.intent.value,
+                    "intent": state["intent"].value,
                 },
             )
-            logger.info(f"[SVIM] Conversation saved to memory for user {state.user_id}")
+            logger.info(f"[SVIM] Conversation saved to memory for user {state['user_id']}")
         except Exception as e:
             logger.error(f"[SVIM] Error saving conversation to memory: {e}")
 
@@ -341,64 +340,33 @@ class SVIMAgent(BaseAgent):
                     "response": "Estou passando por uma instabilidade no momento. Pode tentar novamente em instantes?",
                 }
 
-            state = SVIMState(
-                messages=[
+            state: SVIMState = {
+                "messages": [
                     {
                         "role": "user",
                         "content": message,
                         "timestamp": datetime.now().isoformat(),
                     }
                 ],
-                user_id=user_id,
-                session_id=session_id or f"svim_session_{user_id}_{int(datetime.now().timestamp())}",
-                intent=SVIMIntent.UNKNOWN,
-                customer_profile=customer_profile or {},
-                appointment_context={},
-                policies_context=policies_context or {},
-            )
+                "user_id": user_id,
+                "session_id": session_id or f"svim_session_{user_id}_{int(datetime.now().timestamp())}",
+                "intent": SVIMIntent.UNKNOWN,
+                "customer_profile": customer_profile or {},
+                "appointment_context": {},
+                "policies_context": policies_context or {},
+                "needs_handoff": False,
+            }
 
-            config = {"configurable": {"thread_id": state.session_id}}
+            config = {"configurable": {"thread_id": state["session_id"]}}
 
             # Chama o workflow do LangGraph
             workflow_result = await self.workflow.ainvoke(state, config=config)
 
-            # Quando usamos MemorySaver, o LangGraph costuma devolver um dict serializado.
-            # Aqui reconstruímos o SVIMState a partir desse dict, se for o caso.
-            if isinstance(workflow_result, dict):
-                raw_intent = workflow_result.get("intent", SVIMIntent.UNKNOWN)
-
-                if isinstance(raw_intent, SVIMIntent):
-                    intent = raw_intent
-                else:
-                    try:
-                        intent = SVIMIntent(raw_intent)
-                    except Exception:
-                        intent = SVIMIntent.UNKNOWN
-
-                result = SVIMState(
-                    messages=workflow_result.get("messages", []),
-                    user_id=workflow_result.get("user_id", user_id),
-                    session_id=workflow_result.get("session_id", state.session_id),
-                    intent=intent,
-                    customer_profile=workflow_result.get("customer_profile", {}),
-                    appointment_context=workflow_result.get("appointment_context", {}),
-                    policies_context=workflow_result.get("policies_context", {}),
-                    needs_handoff=workflow_result.get("needs_handoff", False),
-                )
-            else:
-                result = workflow_result
-
-            # Defesa extra: se ainda assim não for SVIMState, retorna erro amigável
-            if not isinstance(result, SVIMState):
-                logger.error(f"[SVIM] Invalid workflow result type: {type(result)} - value: {result}")
-                return {
-                    "success": False,
-                    "error": "Invalid workflow output",
-                    "response": "Tive um probleminha técnico interno, pode tentar novamente por favor?",
-                }
+            # Com TypedDict, o resultado já é um dict
+            result = workflow_result
 
             assistant_message = next(
-                (msg for msg in reversed(result.messages) if msg.get("role") == "assistant"),
+                (msg for msg in reversed(result["messages"]) if msg.get("role") == "assistant"),
                 None,
             )
 
@@ -406,9 +374,9 @@ class SVIMAgent(BaseAgent):
                 "success": True,
                 "response": assistant_message["content"] if assistant_message else "",
                 "metadata": {
-                    "session_id": result.session_id,
-                    "intent": result.intent.value,
-                    "needs_handoff": result.needs_handoff,
+                    "session_id": result["session_id"],
+                    "intent": result["intent"].value,
+                    "needs_handoff": result["needs_handoff"],
                 },
             }
 

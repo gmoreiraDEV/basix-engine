@@ -1,6 +1,5 @@
 import os
 import json
-from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from qdrant_client import QdrantClient

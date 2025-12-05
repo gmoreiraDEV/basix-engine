@@ -1,9 +1,17 @@
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 # Evitar buffering em logs
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev \
+        python3-dev \
+        pkg-config && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copia requirements e instala deps
 COPY workflows/svim/agents/requirements.txt .
