@@ -22,6 +22,9 @@ tasks:
       - "-m"
       - "agents.main"
 
+    varsRegex:
+    response: "^(.*)$"
+
 triggers:
   - id: webhook
     type: io.kestra.plugin.core.trigger.Webhook
