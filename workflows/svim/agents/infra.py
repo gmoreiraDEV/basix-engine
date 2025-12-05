@@ -57,9 +57,9 @@ def ensure_qdrant_collection(
         )
     except Exception as e:
         if "already exists" in str(e).lower():
-            pass
-        else:
-            print(f"Qdrant index error: {e}")
+            return
+        print(f"Qdrant index error: {e}")
+
 
 
 

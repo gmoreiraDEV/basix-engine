@@ -362,8 +362,7 @@ class SVIMAgent(BaseAgent):
             # Chama o workflow do LangGraph
             workflow_result = await self.workflow.ainvoke(state, config=config)
 
-            # Com TypedDict, o resultado já é um dict
-            result = workflow_result
+            result = workflow_result.get("state", workflow_result)
 
             assistant_message = next(
                 (msg for msg in reversed(result["messages"]) if msg.get("role") == "assistant"),
