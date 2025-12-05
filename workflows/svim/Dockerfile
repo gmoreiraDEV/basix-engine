@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.12-slim-bullseye
 
 # Evitar buffering em logs
 ENV PYTHONUNBUFFERED=1
