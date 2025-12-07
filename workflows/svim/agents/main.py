@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import traceback
 from typing import Any, Dict
 
 from agents.maria import create_svim_agent
@@ -55,12 +56,14 @@ async def run_once() -> Dict[str, Any]:
 
 def main():
     try:
-        result = asyncio.run(run_once())        
-        path = "/kestra/output/output.json"
-        
-        with open(path, "w", encoding="utf-8") as f:
+        result = asyncio.run(run_once())
+
+        output_path = os.getenv("OUTPUT_DIR", "/tmp") + "/output.json"
+
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False)
-        
+
+        print("RESULT_BLOCK_OK")
         print(json.dumps(result, ensure_ascii=False))
 
     except Exception as e:
@@ -69,4 +72,4 @@ def main():
         raise
 
 if __name__ == "__main__":
-    main() 
+    main()
