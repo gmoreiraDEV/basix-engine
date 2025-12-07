@@ -59,13 +59,6 @@ def main():
     try:
         result = asyncio.run(run_once())
         Kestra.outputs(result)
-
-        # output_path = os.getenv("OUTPUT_DIR", "/tmp") + "/output.json"
-
-        # with open(output_path, "w", encoding="utf-8") as f:
-        #     json.dump(result, f, ensure_ascii=False)
-
-        # print("RESULT_BLOCK_OK")
         print(json.dumps(result, ensure_ascii=False))
 
     except Exception as e:
