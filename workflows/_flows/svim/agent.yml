@@ -22,14 +22,10 @@ tasks:
       - "-m"
       - "agents.main"
 
-  - id: result
-    type: io.kestra.plugin.core.debug.Return
-    format: "{{ outputs.agent.vars }}"
-
-outputs:
-  result:
-    type: STRING
-    value: "{{ outputs.result.return }}"
+  - id: output
+    type: io.kestra.plugin.core.output.OutputValues
+    values:
+      response: "{{ outputs.agent.vars }}"
 
 triggers:
   - id: webhook
