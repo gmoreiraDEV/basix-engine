@@ -55,13 +55,18 @@ async def run_once() -> Dict[str, Any]:
 
 
 def main():
-    result = asyncio.run(run_once())
+    try:
+        result = asyncio.run(run_once())
+        with open("/tmp/output.json", "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False)
+            print("DOC CREATED")
+        print("RESULT_BLOCK_OK")
+        print(json.dumps(result, ensure_ascii=False))
+    except Exception as e:
+        print("PYTHON_CRASH:", e)
+        traceback.print_exc()
+        raise
     
-    with open("/tmp/output.json", "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False)
-
-    print(json.dumps(result, ensure_ascii=False))
-
 
 if __name__ == "__main__":
     main() 
