@@ -53,20 +53,20 @@ async def run_once() -> Dict[str, Any]:
     finally:
         db_session.close()
 
-
 def main():
     try:
-        result = asyncio.run(run_once())
-        with open("/tmp/output.json", "w", encoding="utf-8") as f:
+        result = asyncio.run(run_once())        
+        path = "/kestra/output/output.json"
+        
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False)
-            print("DOC CREATED")
-        print("RESULT_BLOCK_OK")
+        
         print(json.dumps(result, ensure_ascii=False))
+
     except Exception as e:
         print("PYTHON_CRASH:", e)
         traceback.print_exc()
         raise
-    
 
 if __name__ == "__main__":
     main() 
