@@ -21,13 +21,16 @@ tasks:
       - "python"
       - "-m"
       - "agents.main"
+    
+    outputFiles:
+    - "/tmp/output.json"
 
     varsRegex:
       response: "^(.*)$"
 
   - id: print_result
     type: io.kestra.plugin.core.log.Log
-    message: "Resposta da Maria: {{ (outputs.run_agent.vars.result | json).response }}"
+    message: "Resposta da Maria: {{ (outputs.agent.outputFiles | json).response }}"
 
 triggers:
   - id: webhook
