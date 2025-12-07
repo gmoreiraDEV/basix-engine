@@ -2,6 +2,7 @@ langchain==1.1.0
 langgraph==1.0.4
 langgraph-checkpoint==3.0.1
 langsmith==0.4.53
+kestra==1.1.0
 openai==2.8.1
 qdrant-client==1.16.1
 SQLAlchemy==2.0.44
