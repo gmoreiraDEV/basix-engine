@@ -5,17 +5,10 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential \
-        libpq-dev \
-        python3-dev \
-        pkg-config && \
-    rm -rf /var/lib/apt/lists/*
-
 # Copia requirements e instala deps
 COPY workflows/svim/agents/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN mkdir -p /tmp
 
 # Copia o código do agente
 COPY workflows/svim/agents ./agents

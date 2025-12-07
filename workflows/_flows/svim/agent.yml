@@ -4,7 +4,7 @@ namespace: company.svim
 tasks:
   - id: agent
     type: io.kestra.plugin.docker.Run
-    containerImage: gmoreiradev/svim-agent:v0.0.2
+    containerImage: gmoreiradev/svim-agent:v0.0.3
     
     env:
       SVIM_MESSAGE: "{{ trigger.body.message }}"
@@ -30,7 +30,7 @@ tasks:
 
   - id: print_result
     type: io.kestra.plugin.core.log.Log
-    message: "Resposta da Maria: {{ outputs.agent.outputFiles }}"
+    message: "Resposta da Maria: {{ read(outputs.agent.outputFiles['/tmp/output.json']) }}"
 
 triggers:
   - id: webhook

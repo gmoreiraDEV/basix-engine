@@ -56,7 +56,10 @@ async def run_once() -> Dict[str, Any]:
 
 def main():
     result = asyncio.run(run_once())
-    # devolve JSON pro stdout (Kestra captura se precisar)
+    
+    with open("/tmp/output.json", "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False)
+
     print(json.dumps(result, ensure_ascii=False))
 
 
