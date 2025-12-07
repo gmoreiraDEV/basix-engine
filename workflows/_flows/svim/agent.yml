@@ -30,7 +30,7 @@ tasks:
 
   - id: print_result
     type: io.kestra.plugin.core.log.Log
-    message: "Resposta da Maria: {{ (outputs.agent.outputFiles | json).response }}"
+    message: "Resposta da Maria: {{ outputs.agent.outputFiles }}"
 
 triggers:
   - id: webhook
