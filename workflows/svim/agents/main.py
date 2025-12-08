@@ -19,7 +19,6 @@ def _load_json_env(name: str) -> Dict[str, Any]:
     try:
         return json.loads(raw)
     except Exception:
-        # se vier lixo, ignora e segue a vida
         return {}
 
 
@@ -34,7 +33,6 @@ async def run_once() -> Dict[str, Any]:
     if not message:
         raise ValueError("SVIM_MESSAGE não foi definido nas variáveis de ambiente")
 
-    # cria sessão de DB (usa DATABASE_URL do ambiente)
     SessionFactory = create_session_factory()
     db_session = SessionFactory()
 

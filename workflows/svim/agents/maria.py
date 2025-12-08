@@ -37,6 +37,7 @@ from agents.infra import (
 from agents.llm_client import LLMClient
 from agents.vector_store import SVIMVectorStore
 from agents.base_agent import BaseAgent
+from agents.tools.index import TOOLS
 
 # Prompts da SVIM
 from agents.prompts import SVIMPrompts
@@ -127,6 +128,9 @@ class SVIMAgent(BaseAgent):
         # Gestão de contexto
         self.max_context_messages = config.get("max_context_messages", 10)
         self.cache_ttl = config.get("cache_ttl", 300)
+
+        # Tools
+        self.tools = TOOLS
 
         # Workflow LangGraph
         try:
@@ -224,52 +228,91 @@ class SVIMAgent(BaseAgent):
     async def _generate_response(self, state: SVIMState) -> SVIMState:
         """
         Gera resposta da Maria usando os prompts da SVIM.
-        Escolhe o prompt adequado com base na intenção detectada.
+        Suporta chamadas de ferramentas (tools).
         """
         try:
-            # Monta contexto para os prompts (histórico + perfil básico)
             history = state["appointment_context"].get("history", "")
-            customer_name = state["customer_profile"].get("name") or state["customer_profile"].get("nome") or "cliente"
+            customer_name = state["customer_profile"].get("name") or "cliente"
             base_context = f"Histórico recente:\n{history}\n\nCliente: {customer_name}"
 
-            # Escolhe prompt
+            # Escolher prompt conforme intenção
             if state["intent"] in [SVIMIntent.SCHEDULE, SVIMIntent.RESCHEDULE, SVIMIntent.CANCEL]:
                 system_prompt = self.prompts.get_scheduling_prompt(base_context)
             elif state["intent"] == SVIMIntent.INFO:
-                # Aqui podemos incluir policies_context como contexto dinâmico
                 policies = state["policies_context"].get("policies_text", "")
-                context = f"{base_context}\n\nPolíticas e informações extras:\n{policies}"
-                system_prompt = self.prompts.get_policy_prompt(context)
+                system_prompt = self.prompts.get_policy_prompt(
+                    f"{base_context}\n\nPolíticas:\n{policies}"
+                )
             else:
-                # Conversa geral / default
                 system_prompt = self.prompts.get_base_conversation_prompt(base_context)
 
-            # Prepara mensagens pro LLM
-            # Nunca mandar o estado completo, só o que for necessário
-            recent_messages = state["messages"][-5:]
+            recent_messages = state["messages"][-6:]
 
-            response_text = await self.llm_client.chat_completion(
-                messages=recent_messages,
+        # === 1. Chamada ao modelo com tools habilitadas ===
+        response = await self.llm_client.chat_completion(
+            messages=recent_messages,
+            system_prompt=system_prompt,
+            tools=self.tools,       # <-- AQUI
+            temperature=0.3,
+            max_tokens=500,
+        )
+
+        # === 2. Caso seja texto simples ===
+        if isinstance(response, str):
+            state["messages"].append({
+                "role": "assistant",
+                "content": response,
+                "timestamp": datetime.now().isoformat(),
+            })
+            return state
+
+        # === 3. Caso seja tool call ===
+        if "tool" in response:
+            tool_name = response["tool"]["name"]
+            tool_args = response["tool"]["arguments"]
+
+            tool_fn = next((t for t in self.tools if t.name == tool_name), None)
+            if not tool_fn:
+                raise ValueError(f"Tool '{tool_name}' não encontrada")
+
+            tool_result = await tool_fn(**tool_args)
+
+            # Inserir chamada na conversa
+            state["messages"].append({
+                "role": "assistant",
+                "tool_name": tool_name,
+                "tool_arguments": tool_args,
+                "content": None,
+            })
+
+            # Inserir resultado da tool
+            state["messages"].append({
+                "role": "tool",
+                "tool_name": tool_name,
+                "content": json.dumps(tool_result),
+            })
+
+            # === 4. Segunda chamada para resposta final ===
+            final_response = await self.llm_client.chat_completion(
+                messages=state["messages"],
                 system_prompt=system_prompt,
-                temperature=0.4,
-                max_tokens=350,
+                temperature=0.3,
             )
 
             state["messages"].append({
                 "role": "assistant",
-                "content": response_text,
+                "content": final_response,
                 "timestamp": datetime.now().isoformat(),
             })
 
-            logger.info(f"[SVIM] Response generated successfully for user {state['user_id']}")
-        except Exception as e:
-            logger.error(f"[SVIM] Error generating response: {e}")
-            state["messages"].append({
-                "role": "assistant",
-                "content": "Tive um probleminha técnico aqui, mas estou à disposição para te ajudar. Pode repetir sua pergunta ou pedido, por favor?",
-                "timestamp": datetime.now().isoformat(),
-            })
+        return state
 
+    except Exception as e:
+        logger.error(f"[SVIM] Error generating response (tools): {e}")
+        state["messages"].append({
+            "role": "assistant",
+            "content": "Tive um erro ao processar sua solicitação. Pode tentar novamente?",
+        })
         return state
 
     async def _save_memory(self, state: SVIMState) -> SVIMState:
@@ -453,19 +496,6 @@ def create_svim_agent(
 ) -> SVIMAgent:
     """
     Factory para criar a instância do agente SVIM.
-
-    Exemplo (FastAPI):
-
-        @app.post("/svim/chat")
-        async def svim_chat(payload: SVIMChatRequest, db: Session = Depends(get_db)):
-            agent = create_svim_agent(db_session=db)
-            result = await agent.process_message(
-                user_id=payload.user_id,
-                message=payload.message,
-                session_id=payload.session_id,
-                customer_profile=payload.customer_profile,
-            )
-            return result
     """
     default_config = {
         "max_context_messages": 10,

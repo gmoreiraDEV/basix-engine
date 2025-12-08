@@ -1,3 +1,5 @@
-from .schedule import create_schedule
+from .schedule import criar_agendamento
+from .professionals import listar_profissionais, listar_servicos_profissional
+from .services import listar_servicos
 
-tools=[create_schedule]
+TOOLS = [criar_agendamento, listar_profissionais, listar_servicos_profissional, listar_servicos]

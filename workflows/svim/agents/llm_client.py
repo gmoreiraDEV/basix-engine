@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Union
 from openai import OpenAI
 
 class LLMClient:
@@ -10,18 +10,72 @@ class LLMClient:
         self,
         messages: List[Dict[str, Any]],
         system_prompt: str = "",
+        tools: Optional[List[Any]] = None,
         temperature: float = 0.4,
         max_tokens: int = 350,
-    ) -> str:
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Suporta:
+        - Resposta normal (string)
+        - Chamada de ferramenta (dict com {tool: {name, arguments}})
+        """
+
+        # ============================
+        # 🔧 Pré-processamento
+        # ============================
         full_messages = []
         if system_prompt:
             full_messages.append({"role": "system", "content": system_prompt})
         full_messages.extend(messages)
 
+        # Converter tools para formato OpenAI
+        tool_defs = None
+        if tools:
+            tool_defs = []
+            for t in tools:
+                tool_defs.append({
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters
+                    }
+                })
+
+        # ============================
+        # 🚀 Chamada à API
+        # ============================
         resp = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=full_messages,
+            tools=tool_defs,
+            tool_choice="auto",
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        return resp.choices[0].message.content
+
+        msg = resp.choices[0].message
+
+        # ============================
+        # 🧠 1. Se é RESPOSTA NORMAL
+        # ============================
+        if msg.content:
+            return msg.content
+
+        # ============================
+        # 🔧 2. Se é UMA TOOL CALL
+        # ============================
+        if msg.tool_calls:
+            tc = msg.tool_calls[0]
+
+            return {
+                "tool": {
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments  # já vem como Dict
+                }
+            }
+
+        # ============================
+        # 🛑 Nada retornado?
+        # ============================
+        return "Desculpe, não consegui entender sua solicitação."
