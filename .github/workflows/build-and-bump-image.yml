@@ -6,7 +6,7 @@ on:
       - main
     # Evita loop quando o próprio Action só altera o agent.yml
     paths-ignore:
-      - 'workflows/svim/agent.yml'
+      - 'workflows/_flows/svim/agent.yml'
 
 jobs:
   build-and-bump:
@@ -71,6 +71,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add workflows/svim/agent.yml
+          git add workflows/_flows/svim/agent.yml
           git commit -m "chore: bump svim-agent image to ${IMAGE_TAG} [skip ci]"
           git push
