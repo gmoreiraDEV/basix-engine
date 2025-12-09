@@ -17,6 +17,7 @@ Arquitetura:
 """
 
 import os
+import json
 import logging
 from typing import TypedDict
 from datetime import datetime
@@ -252,78 +253,78 @@ class SVIMAgent(BaseAgent):
 
             recent_messages = state["messages"][-6:]
 
-        # === 1. Chamada ao modelo com tools habilitadas ===
-        response = await self.llm_client.chat_completion(
-            messages=recent_messages,
-            system_prompt=system_prompt,
-            tools=self.tools,
-            temperature=0.3,
-            max_tokens=500,
-        )
-
-        # === 2. Caso seja texto simples ===
-        if isinstance(response, str):
-            state["messages"].append({
-                "role": "assistant",
-                "content": response,
-                "timestamp": datetime.now().isoformat(),
-            })
-            return state
-
-        # === 3. Caso seja tool call ===
-        if "tool" in response:
-            tool_name = response["tool"]["name"]
-            tool_args = response["tool"]["arguments"]
-
-            tool_fn = next((t for t in self.tools if t.name == tool_name), None)
-            if not tool_fn:
-                raise ValueError(f"Tool '{tool_name}' não encontrada")
-
-            tool_result = await tool_fn(**tool_args)
-
-            # Inserir chamada na conversa
-            state["messages"].append({
-                "role": "assistant",
-                "tool_name": tool_name,
-                "tool_arguments": tool_args,
-                "content": None,
-            })
-
-            # Inserir resultado da tool
-            state["messages"].append({
-                "role": "tool",
-                "tool_name": tool_name,
-                "content": json.dumps(tool_result),
-            })
-
-            # === 4. Segunda chamada para resposta final ===
-            final_response = await self.llm_client.chat_completion(
-                messages=state["messages"],
+            # === 1. Chamada ao modelo com tools habilitadas ===
+            response = await self.llm_client.chat_completion(
+                messages=recent_messages,
                 system_prompt=system_prompt,
+                tools=self.tools,
                 temperature=0.3,
+                max_tokens=500,
             )
 
+            # === 2. Caso seja texto simples ===
+            if isinstance(response, str):
+                state["messages"].append({
+                    "role": "assistant",
+                    "content": response,
+                    "timestamp": datetime.now().isoformat(),
+                })
+                return state
+
+            # === 3. Caso seja tool call ===
+            if "tool" in response:
+                tool_name = response["tool"]["name"]
+                tool_args = response["tool"]["arguments"]
+
+                tool_fn = next((t for t in self.tools if t.name == tool_name), None)
+                if not tool_fn:
+                    raise ValueError(f"Tool '{tool_name}' não encontrada")
+
+                tool_result = await tool_fn(**tool_args)
+
+                # Inserir chamada na conversa
+                state["messages"].append({
+                    "role": "assistant",
+                    "tool_name": tool_name,
+                    "tool_arguments": tool_args,
+                    "content": None,
+                })
+
+                # Inserir resultado da tool
+                state["messages"].append({
+                    "role": "tool",
+                    "tool_name": tool_name,
+                    "content": json.dumps(tool_result),
+                })
+
+                # === 4. Segunda chamada para resposta final ===
+                final_response = await self.llm_client.chat_completion(
+                    messages=state["messages"],
+                    system_prompt=system_prompt,
+                    temperature=0.3,
+                )
+
+                state["messages"].append({
+                    "role": "assistant",
+                    "content": final_response,
+                    "timestamp": datetime.now().isoformat(),
+                })
+
+            last_user_msg = next(
+                m["content"] for m in reversed(state["messages"]) if m["role"] == "user"
+            ).lower()
+
+            state["finish_session"] = any(tok in last_user_msg for tok in SVIMIntent.FAREWELL.value)
+
+            return state
+
+        except Exception as e:
+            logger.error(f"[SVIM] Error generating response (tools): {e}")
             state["messages"].append({
                 "role": "assistant",
-                "content": final_response,
-                "timestamp": datetime.now().isoformat(),
+                "content": "Tive um erro ao processar sua solicitação. Pode tentar novamente?",
             })
-
-        last_user_msg = next(
-            m["content"] for m in reversed(state["messages"]) if m["role"] == "user"
-        ).lower()
-
-        state["finish_session"] = any(tok in last_user_msg for tok in SVIMIntent.FAREWELL.value)
-
-        return state
-
-    except Exception as e:
-        logger.error(f"[SVIM] Error generating response (tools): {e}")
-        state["messages"].append({
-            "role": "assistant",
-            "content": "Tive um erro ao processar sua solicitação. Pode tentar novamente?",
-        })
-        return state
+            return state
 
     async def _save_memory(self, state: SVIMState) -> SVIMState:
         """
