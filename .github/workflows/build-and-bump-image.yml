@@ -32,7 +32,7 @@ jobs:
       - name: Bump version in agent.yml
         id: bump
         run: |
-          FILE="workflows/svim/agent.yml"
+          FILE="workflows/_flows/svim/agent.yml"
 
           # Pega a versão atual no formato X.Y.Z a partir da linha containerImage
           current=$(grep 'containerImage:' "$FILE" | sed -E 's/.*:v([0-9]+\.[0-9]+\.[0-9]+)/\1/')
