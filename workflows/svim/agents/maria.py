@@ -194,8 +194,7 @@ class SVIMAgent(BaseAgent):
 
     async def _detect_intent(self, state: SVIMState) -> SVIMState:
         """
-        Detecta a intenção básica do cliente com heurísticas simples.
-        (Se quiser, depois dá pra trocar por uma chamada LLM só de classificação.)
+        Detecta a intenção básica do cliente usando uma chamada LLM de classificação.
         """
         try:
             last_message = ""
@@ -204,26 +203,41 @@ class SVIMAgent(BaseAgent):
                     last_message = msg.get("content", "")
                     break
 
-            text = last_message.lower()
+            classifier_prompt = (
+                "Você é um classificador de intenção para uma recepcionista virtual de salão/barbearia. "
+                "Analise a última mensagem do cliente e retorne apenas um JSON válido com a chave "
+                '"intent" e um dos valores: schedule, reschedule, cancel, info, smalltalk, farewell ou unknown.'
+            )
 
-            intent = SVIMIntent.UNKNOWN
+            response = await self.llm_client.chat_completion(
+                messages=[{"role": "user", "content": last_message}],
+                system_prompt=classifier_prompt,
+                temperature=0,
+                max_tokens=32,
+                tools=None,
+                tool_choice=None,
+            )
 
-            # Heurísticas básicas em PT-BR
-            if any(word in text for word in ["agendar", "marcar", "horário", "horario", "quero marcar", "cortar", "fazer"]):
-                intent = SVIMIntent.SCHEDULE
-            elif any(word in text for word in ["remarcar", "mudar horário", "mudar horario", "reagendar"]):
-                intent = SVIMIntent.RESCHEDULE
-            elif any(word in text for word in ["cancelar", "desmarcar"]):
-                intent = SVIMIntent.CANCEL
-            elif any(word in text for word in ["que horas", "funciona", "horário de atendimento", "horario de atendimento", "abre", "fecha", "preço", "preco", "valor", "serviço", "servico"]):
-                intent = SVIMIntent.INFO
-            elif any(word in text for word in ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "tudo bem"]):
-                intent = SVIMIntent.SMALLTALK
-            elif any(word in text for word in ["adeus", "tchau", "tchau tchau", "ate logo", "ate mais", "ate breve", "obrigado", "obrigada", "pode encerrar", "pode finalizar", "só isso", "valeu", "tudo certo", "perfeito",]):
-                intent = SVIMIntent.FAREWELL
+            intent_value = ""
+            if isinstance(response, str):
+                try:
+                    parsed = json.loads(response)
+                    intent_value = parsed.get("intent", "").lower()
+                except json.JSONDecodeError:
+                    intent_value = response.strip().lower()
 
-            state["intent"] = intent
-            logger.info(f"[SVIM] Detected intent for user {state['user_id']}: {intent.value}")
+            intent_map = {
+                "schedule": SVIMIntent.SCHEDULE,
+                "reschedule": SVIMIntent.RESCHEDULE,
+                "cancel": SVIMIntent.CANCEL,
+                "info": SVIMIntent.INFO,
+                "smalltalk": SVIMIntent.SMALLTALK,
+                "farewell": SVIMIntent.FAREWELL,
+                "unknown": SVIMIntent.UNKNOWN,
+            }
+
+            state["intent"] = intent_map.get(intent_value, SVIMIntent.UNKNOWN)
+            logger.info(f"[SVIM] Detected intent for user {state['user_id']}: {state['intent'].value}")
         except Exception as e:
             logger.error(f"[SVIM] Error detecting intent: {e}")
             state["intent"] = SVIMIntent.UNKNOWN
