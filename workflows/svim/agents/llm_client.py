@@ -1,4 +1,5 @@
 import os
+import json
 from typing import Any, Dict, List, Optional, Union
 from openai import OpenAI
 
@@ -72,7 +73,7 @@ class LLMClient:
             return {
                 "tool": {
                     "name": tc.function.name,
-                    "arguments": tc.function.arguments  # já vem como Dict
+                    "arguments": json.loads(tc.function.arguments)
                 }
             }
 
