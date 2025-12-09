@@ -2,6 +2,7 @@ from langchain.tools import tool
 import requests
 import os
 from dotenv import load_dotenv
+from typing import Any
 
 load_dotenv()
 X_API_TOKEN = os.getenv("X_API_TOKEN")
@@ -9,32 +10,34 @@ ESTABELECIMENTO_ID = os.getenv("ESTABELECIMENTO_ID")
 URL_BASE = os.getenv("URL_BASE")
 
 headers = {
-    'X-Api-Key': X_API_TOKEN,
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    'estabelecimentoId': ESTABELECIMENTO_ID
-}  
+    "X-Api-Key": X_API_TOKEN,
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "estabelecimentoId": ESTABELECIMENTO_ID,
+}
 
 
 @tool
-def listar_servicos(nome: str | None, categoria: str | None, somenteVisiveisCliente: bool | None) -> dict | str:
+def listar_servicos(
+    nome: str | None = None,
+    categoria: str | None = None,
+    somenteVisiveisCliente: bool | None = None,
+) -> dict:
     """
-    Tool: Listar Servicos
-    Descrição: Lista os serviços usando a API Trinks.
+    Tool: Listar Serviços
+    Descrição: Lista serviços disponíveis na API Trinks.
 
     Args:
-        nome (str | None): O nome do serviço.
-        categoria (str | None): A categoria do serviço.
-        somenteVisiveisCliente (bool | None): Um booleano indicando se o serviço deve ser visível para o cliente.
+        nome (str | None): Filtro pelo nome do serviço.
+        categoria (str | None): Categoria do serviço.
+        somenteVisiveisCliente (bool | None): Se True, só serviços visíveis ao cliente.
 
     Returns:
-        dict: Um dicionário contendo os detalhes dos serviços se bem-sucedido,
-              ou uma mensagem de erro se a listagem falhar.
+        dict: JSON com serviços ou {"error": "..."}.
     """
-
-    params = {
+    params: dict[str, Any] = {
         "page": 1,
-        "pageSize": 50
+        "pageSize": 50,
     }
 
     if nome is not None:
@@ -44,15 +47,15 @@ def listar_servicos(nome: str | None, categoria: str | None, somenteVisiveisClie
         params["categoria"] = categoria
 
     if somenteVisiveisCliente is not None:
-        params["somenteVisiveisCliente"] = True
+        params["somenteVisiveisCliente"] = bool(somenteVisiveisCliente)
 
     try:
-        response = requests.get(f"{URL_BASE}/servicos", headers, params)
-        response.raise_for_status() 
-        print("Servicos listados com sucesso:", response.json())
+        response = requests.get(
+            f"{URL_BASE}/servicos",
+            headers=headers,
+            params=params,
+        )
+        response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"Erro ao tentar listar servicos: {e}")
         return {"error": str(e)}
-
-   

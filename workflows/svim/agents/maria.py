@@ -54,6 +54,7 @@ class SVIMIntent(Enum):
     CANCEL = "cancel"           # Cancelar
     INFO = "info"               # Dúvidas sobre serviços / horários / políticas
     SMALLTALK = "smalltalk"     # Conversa leve / saudação
+    FAREWELL = "farewell"       # Despedida
     UNKNOWN = "unknown"         # Não identificado
 
 
@@ -69,6 +70,7 @@ class SVIMState(TypedDict):
     appointment_context: Dict[str, Any]
     policies_context: Dict[str, Any]
     needs_handoff: bool
+    finish_session: bool
 
 
 # ==================== Agente Principal ====================
@@ -206,7 +208,7 @@ class SVIMAgent(BaseAgent):
             intent = SVIMIntent.UNKNOWN
 
             # Heurísticas básicas em PT-BR
-            if any(word in text for word in ["agendar", "marcar", "horário", "horario", "quero marcar"]):
+            if any(word in text for word in ["agendar", "marcar", "horário", "horario", "quero marcar", "cortar", "fazer"]):
                 intent = SVIMIntent.SCHEDULE
             elif any(word in text for word in ["remarcar", "mudar horário", "mudar horario", "reagendar"]):
                 intent = SVIMIntent.RESCHEDULE
@@ -216,6 +218,8 @@ class SVIMAgent(BaseAgent):
                 intent = SVIMIntent.INFO
             elif any(word in text for word in ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "tudo bem"]):
                 intent = SVIMIntent.SMALLTALK
+            elif any(word in text for word in ["adeus", "tchau", "tchau tchau", "ate logo", "ate mais", "ate breve", "obrigado", "obrigada", "pode encerrar", "pode finalizar", "só isso", "valeu", "tudo certo", "perfeito",]):
+                intent = SVIMIntent.FAREWELL
 
             state["intent"] = intent
             logger.info(f"[SVIM] Detected intent for user {state['user_id']}: {intent.value}")
@@ -252,7 +256,7 @@ class SVIMAgent(BaseAgent):
         response = await self.llm_client.chat_completion(
             messages=recent_messages,
             system_prompt=system_prompt,
-            tools=self.tools,       # <-- AQUI
+            tools=self.tools,
             temperature=0.3,
             max_tokens=500,
         )
@@ -305,6 +309,12 @@ class SVIMAgent(BaseAgent):
                 "timestamp": datetime.now().isoformat(),
             })
 
+        last_user_msg = next(
+            m["content"] for m in reversed(state["messages"]) if m["role"] == "user"
+        ).lower()
+
+        state["finish_session"] = any(tok in last_user_msg for tok in SVIMIntent.FAREWELL.value)
+
         return state
 
     except Exception as e:
@@ -323,9 +333,10 @@ class SVIMAgent(BaseAgent):
             await self.vector_store.add_conversation(
                 user_id=state["user_id"],
                 session_id=state["session_id"],
-                messages=state["messages"][-2:],  # últimas mensagens (user + Maria)
+                messages=state["messages"][-2:],
                 metadata={
                     "intent": state["intent"].value,
+                    "finish_session": state["finish_session"],
                 },
             )
             logger.info(f"[SVIM] Conversation saved to memory for user {state['user_id']}")
@@ -398,6 +409,7 @@ class SVIMAgent(BaseAgent):
                 "appointment_context": {},
                 "policies_context": policies_context or {},
                 "needs_handoff": False,
+                "finish_session": False,
             }
 
             config = {"configurable": {"thread_id": state["session_id"]}}
@@ -419,6 +431,7 @@ class SVIMAgent(BaseAgent):
                     "session_id": result["session_id"],
                     "intent": result["intent"].value,
                     "needs_handoff": result["needs_handoff"],
+                    "finish_session": result["finish_session"],
                 },
             }
 

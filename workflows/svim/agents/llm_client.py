@@ -10,10 +10,11 @@ class LLMClient:
         self,
         messages: List[Dict[str, Any]],
         system_prompt: str = "",
-        tools: Optional[List[Any]] = None,
         temperature: float = 0.4,
         max_tokens: int = 350,
-    ) -> Union[str, Dict[str, Any]]:
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: str | None = None,
+    ) -> Any:
         """
         Suporta:
         - Resposta normal (string)
@@ -49,7 +50,7 @@ class LLMClient:
             model="gpt-4o-mini",
             messages=full_messages,
             tools=tool_defs,
-            tool_choice="auto",
+            tool_choice=tool_choice or "auto",
             temperature=temperature,
             max_tokens=max_tokens,
         )
