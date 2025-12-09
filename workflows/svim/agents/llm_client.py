@@ -72,6 +72,7 @@ class LLMClient:
 
             return {
                 "tool": {
+                    "id": tc.id,
                     "name": tc.function.name,
                     "arguments": json.loads(tc.function.arguments)
                 }

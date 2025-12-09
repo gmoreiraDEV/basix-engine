@@ -273,6 +273,7 @@ class SVIMAgent(BaseAgent):
 
             # === 3. Caso seja tool call ===
             if "tool" in response:
+                tool_id = response["tool"]["id"]
                 tool_name = response["tool"]["name"]
                 tool_args = response["tool"]["arguments"]
 
@@ -284,18 +285,25 @@ class SVIMAgent(BaseAgent):
 
                 tool_result = await tool_fn.ainvoke(tool_args)
 
-                # Inserir chamada na conversa
+                # Inserir chamada na conversa (formato OpenAI)
                 state["messages"].append({
                     "role": "assistant",
-                    "tool_name": tool_name,
-                    "tool_arguments": tool_args,
                     "content": None,
+                    "tool_calls": [{
+                        "id": tool_id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "arguments": json.dumps(tool_args)
+                        }
+                    }]
                 })
 
-                # Inserir resultado da tool
+                # Inserir resultado da tool (formato OpenAI)
                 state["messages"].append({
                     "role": "tool",
-                    "tool_name": tool_name,
+                    "tool_call_id": tool_id,
+                    "name": tool_name,
                     "content": json.dumps(tool_result),
                 })
 
