@@ -282,7 +282,7 @@ class SVIMAgent(BaseAgent):
                 
                 tool_fn = tool_data["py_fn"]
 
-                tool_result = await tool_fn(**tool_args)
+                tool_result = await tool_fn.ainvoke(tool_args)
 
                 # Inserir chamada na conversa
                 state["messages"].append({
