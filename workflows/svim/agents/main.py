@@ -48,7 +48,6 @@ async def run_once() -> Dict[str, Any]:
             },
             user_id=user_id,
         )
-        print(result)
         return result
     finally:
         db_session.close()
