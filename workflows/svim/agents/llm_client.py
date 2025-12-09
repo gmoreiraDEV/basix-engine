@@ -51,7 +51,7 @@ class LLMClient:
             model="gpt-4o-mini",
             messages=full_messages,
             tools=tool_defs,
-            tool_choice=tool_choice or "auto",
+            tool_choice=(tool_choice or "auto") if tool_defs else None,
             temperature=temperature,
             max_tokens=max_tokens,
         )
