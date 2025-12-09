@@ -1,0 +1,76 @@
+name: Build & bump SVIM image
+
+on:
+  push:
+    branches:
+      - main
+    # Evita loop quando o próprio Action só altera o agent.yml
+    paths-ignore:
+      - 'workflows/svim/agent.yml'
+
+jobs:
+  build-and-bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # precisa para poder commitar de volta
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Bump version in agent.yml
+        id: bump
+        run: |
+          FILE="workflows/svim/agent.yml"
+
+          # Pega a versão atual no formato X.Y.Z a partir da linha containerImage
+          current=$(grep 'containerImage:' "$FILE" | sed -E 's/.*:v([0-9]+\.[0-9]+\.[0-9]+)/\1/')
+          echo "Current version: $current"
+
+          IFS='.' read -r major minor patch <<< "$current"
+          old_patch="$patch"
+          patch=$((patch + 1))
+
+          new_plain="${major}.${minor}.${patch}"
+          new_version="v${new_plain}"
+
+          echo "New version: $new_version"
+
+          # Atualiza a linha do containerImage
+          # se quiser deixar mais genérico, pode só substituir o sufixo depois do último :
+          sed -i "s#containerImage: gmoreiradev/svim-agent:v${major}.${minor}.${old_patch}#containerImage: gmoreiradev/svim-agent:${new_version}#" "$FILE"
+
+          # Exporta para os próximos steps
+          echo "IMAGE_TAG=${new_version}" >> $GITHUB_ENV
+          echo "image_tag=${new_version}" >> $GITHUB_OUTPUT
+
+      - name: Build & push image
+        run: |
+          echo "Building and pushing image with tag: $IMAGE_TAG"
+          make build-push IMAGE_TAG="${IMAGE_TAG}"
+
+      - name: Commit and push updated agent.yml
+        # Não comita se não houver mudanças (ex: se algo deu errado antes)
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add workflows/svim/agent.yml
+          git commit -m "chore: bump svim-agent image to ${IMAGE_TAG} [skip ci]"
+          git push
