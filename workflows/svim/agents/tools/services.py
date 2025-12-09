@@ -40,6 +40,8 @@ def listar_servicos(
         "pageSize": 50,
     }
 
+    print("listar_servicos", params)
+
     if nome is not None:
         params["nome"] = nome
 

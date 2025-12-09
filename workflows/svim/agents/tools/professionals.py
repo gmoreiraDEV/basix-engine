@@ -34,6 +34,8 @@ def listar_profissionais(page: int = 1, pageSize: int = 50) -> dict:
         "pageSize": pageSize,
     }
 
+    print("listar_profissionais", params)
+
     try:
         response = requests.get(
             f"{URL_BASE}/profissionais",
@@ -68,6 +70,8 @@ def listar_servicos_profissional(
         "page": page,
         "pageSize": pageSize,
     }
+
+    print("listar_servicos_profissional", params)
 
     try:
         response = requests.get(

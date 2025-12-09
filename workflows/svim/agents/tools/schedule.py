@@ -55,6 +55,8 @@ def criar_agendamento(
         "confirmado": confirmado,
     }
 
+    print("criar_agendamento", payload)
+
     try:
         response = requests.post(
             f"{URL_BASE}/agendamentos",
@@ -91,6 +93,8 @@ def listar_agendamentos(
         "dataInicio": dataInicio,
         "dataFim": dataFim,
     }
+
+    print("listar_agendamentos", params)
     if clienteId is not None:
         params["clienteId"] = clienteId
 
