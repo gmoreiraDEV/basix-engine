@@ -283,7 +283,9 @@ class SVIMAgent(BaseAgent):
                 
                 tool_fn = tool_data["py_fn"]
 
+                logger.info(f"[SVIM] Executing tool: {tool_name} with args: {tool_args}")
                 tool_result = await tool_fn.ainvoke(tool_args)
+                logger.info(f"[SVIM] Tool result: {tool_result}")
 
                 # Inserir chamada na conversa (formato OpenAI)
                 state["messages"].append({
