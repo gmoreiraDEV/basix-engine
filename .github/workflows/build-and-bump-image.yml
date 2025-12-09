@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-    # Evita loop quando o próprio Action só altera o agent.yml
+    # Evita loop quando o próprio Action altera só o agent.yml
     paths-ignore:
       - 'workflows/_flows/svim/agent.yml'
 
@@ -48,7 +48,6 @@ jobs:
           echo "New version: $new_version"
 
           # Atualiza a linha do containerImage
-          # se quiser deixar mais genérico, pode só substituir o sufixo depois do último :
           sed -i "s#containerImage: gmoreiradev/svim-agent:v${major}.${minor}.${old_patch}#containerImage: gmoreiradev/svim-agent:${new_version}#" "$FILE"
 
           # Exporta para os próximos steps
@@ -61,7 +60,6 @@ jobs:
           make build-push IMAGE_TAG="${IMAGE_TAG}"
 
       - name: Commit and push updated agent.yml
-        # Não comita se não houver mudanças (ex: se algo deu errado antes)
         run: |
           if git diff --quiet; then
             echo "No changes to commit."
@@ -71,6 +69,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add workflows/_flows/svim/agent.yml
+          if [ -f workflows/_flows/svim/agent.yml ]; then
+            git add workflows/_flows/svim/agent.yml
+          else
+            echo "❌ Arquivo workflows/_flows/svim/agent.yml não encontrado."
+            exit 1
+          fi
+
           git commit -m "chore: bump svim-agent image to ${IMAGE_TAG} [skip ci]"
           git push
+
+      - name: Trigger Kestra sync from git
+        run: |
+          curl -X POST "https://kestra.basixdigital.com.br/api/v1/executions/webhook/system/sync_files_from_git/sync" \
+            -H "Content-Type: application/json" \
+            -d '{}'
