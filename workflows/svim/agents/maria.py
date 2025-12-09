@@ -276,9 +276,11 @@ class SVIMAgent(BaseAgent):
                 tool_name = response["tool"]["name"]
                 tool_args = response["tool"]["arguments"]
 
-                tool_fn = next((t for t in self.tools if t.name == tool_name), None)
-                if not tool_fn:
+                tool_data = next((t for t in self.tools if t["name"] == tool_name), None)
+                if not tool_data:
                     raise ValueError(f"Tool '{tool_name}' não encontrada")
+                
+                tool_fn = tool_data["py_fn"]
 
                 tool_result = await tool_fn(**tool_args)
 

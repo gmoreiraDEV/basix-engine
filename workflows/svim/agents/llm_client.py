@@ -37,9 +37,9 @@ class LLMClient:
                 tool_defs.append({
                     "type": "function",
                     "function": {
-                        "name": t.name,
-                        "description": t.description,
-                        "parameters": t.parameters
+                        "name": t["name"],
+                        "description": t["description"],
+                        "parameters": t["parameters"]
                     }
                 })
 
