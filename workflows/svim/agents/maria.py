@@ -256,7 +256,11 @@ class SVIMAgent(BaseAgent):
 
             # Escolher prompt conforme intenção
             if state["intent"] in [SVIMIntent.SCHEDULE, SVIMIntent.RESCHEDULE, SVIMIntent.CANCEL]:
-                system_prompt = self.prompts.get_scheduling_prompt(base_context)
+                system_prompt = self.prompts.get_scheduling_prompt(
+                    context=state,
+                    cliente_id=state["user_id"],
+                    cliente_nome=state["customer_profile"]["name"],
+                )
             elif state["intent"] == SVIMIntent.INFO:
                 policies = state["policies_context"].get("policies_text", "")
                 system_prompt = self.prompts.get_policy_prompt(

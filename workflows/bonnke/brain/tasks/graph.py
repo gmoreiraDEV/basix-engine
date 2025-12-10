@@ -29,6 +29,19 @@ def tool_node(state: State) -> State:
     call = llm_response.tool_calls[-1]
     name, args, id_ = call["name"], call["args"], call["id"]
 
+    if args is None:
+        args = {}
+    else:
+        args = dict(args)
+
+    if name == "criar_agendamento":
+        cliente_id = state.get("user_id")
+
+        if cliente_id is None:
+            raise ValueError("Missing user_id in state for criar_agendamento")
+
+        args["clienteId"] = int(cliente_id)
+
     try:
         content = TOOLS_BY_NAME[name].invoke(args)
         status = "success"
@@ -39,15 +52,6 @@ def tool_node(state: State) -> State:
     tool_message = ToolMessage(content=content, tool_call_id=id_, status=status)
 
     return {"messages": [tool_message]}
-
-
-def router(state: State) -> Literal["tool_node", "__end__"]:
-    print("> router")
-    llm_response = state["messages"][-1]
-
-    if getattr(llm_response, "tool_calls", None):
-        return "tool_node"
-    return "__end__"
 
 
 def build_graph() -> CompiledStateGraph[State, None, State, State]:
