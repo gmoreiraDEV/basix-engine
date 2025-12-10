@@ -177,6 +177,18 @@ class SVIMAgent(BaseAgent):
         Pode ser usado no prompt como 'context' da SVIM.
         """
         try:
+            state.setdefault("appointment_context", {})
+
+            # Restaura o último appointment_context salvo (se backend não enviou nada)
+            if not state["appointment_context"]:
+                latest_meta = await self.vector_store.get_latest_metadata(
+                    user_id=state["user_id"]
+                )
+                if latest_meta.get("appointment_context"):
+                    state["appointment_context"] = latest_meta.get(
+                        "appointment_context", {}
+                    )
+
             user_context = await self.vector_store.get_user_context(
                 user_id=state["user_id"],
                 k=self.max_context_messages,
@@ -368,6 +380,7 @@ class SVIMAgent(BaseAgent):
                 metadata={
                     "intent": state["intent"].value,
                     "finish_session": state["finish_session"],
+                    "appointment_context": state.get("appointment_context", {}),
                 },
             )
             logger.info(f"[SVIM] Conversation saved to memory for user {state['user_id']}")
@@ -401,6 +414,7 @@ class SVIMAgent(BaseAgent):
         message: str,
         session_id: Optional[str] = None,
         customer_profile: Optional[Dict[str, Any]] = None,
+        appointment_context: Optional[Dict[str, Any]] = None,
         policies_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
@@ -411,6 +425,7 @@ class SVIMAgent(BaseAgent):
             message: texto enviado pelo cliente
             session_id: ID da sessão (whatsapp/atendimento)
             customer_profile: dados básicos do cliente (nome, telefone, etc.)
+            appointment_context: estado corrente de agendamento (inclui appointment_draft)
             policies_context: políticas dinâmicas (pode vir de banco / painel SVIM)
 
         Returns:
@@ -437,7 +452,7 @@ class SVIMAgent(BaseAgent):
                 "session_id": session_id or f"svim_session_{user_id}_{int(datetime.now().timestamp())}",
                 "intent": SVIMIntent.UNKNOWN,
                 "customer_profile": customer_profile or {},
-                "appointment_context": {},
+                "appointment_context": appointment_context or {},
                 "policies_context": policies_context or {},
                 "needs_handoff": False,
                 "finish_session": False,
@@ -463,6 +478,7 @@ class SVIMAgent(BaseAgent):
                     "intent": result["intent"].value,
                     "needs_handoff": result["needs_handoff"],
                     "finish_session": result["finish_session"],
+                    "appointment_context": result.get("appointment_context", {}),
                 },
             }
 
@@ -484,12 +500,14 @@ class SVIMAgent(BaseAgent):
             "message": str,
             "session_id": Optional[str],
             "customer_profile": Optional[Dict[str, Any]],
+            "appointment_context": Optional[Dict[str, Any]],
             "policies_context": Optional[Dict[str, Any]]
         }
         """
         message = input_data.get("message", "")
         session_id = input_data.get("session_id")
         customer_profile = input_data.get("customer_profile", {})
+        appointment_context = input_data.get("appointment_context", {})
         policies_context = input_data.get("policies_context", {})
 
         # Opcional: buscar conversas semelhantes via memória
@@ -504,6 +522,7 @@ class SVIMAgent(BaseAgent):
             message=message,
             session_id=session_id,
             customer_profile=customer_profile,
+            appointment_context=appointment_context,
             policies_context=policies_context,
         )
 
