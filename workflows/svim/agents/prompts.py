@@ -52,7 +52,12 @@ class SVIMPrompts:
     ) -> str:
         """Prompt focado em agendamento / reagendamento / cancelamento"""
 
-        context_str = json.dumps(context, ensure_ascii=False, indent=2)
+        context_str = json.dumps(
+            context,
+            ensure_ascii=False,
+            indent=2,
+            default=str,  
+        )
 
         nome_cliente_info = (
             f"- Nome do cliente (para você usar nas respostas): {cliente_nome}\n"

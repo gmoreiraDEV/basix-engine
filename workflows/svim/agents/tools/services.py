@@ -58,6 +58,7 @@ def listar_servicos(
             params=params,
         )
         response.raise_for_status()
+        print("listar_servicos response:", response.json())
         return response.json()
     except requests.exceptions.RequestException as e:
         return {"error": str(e)}

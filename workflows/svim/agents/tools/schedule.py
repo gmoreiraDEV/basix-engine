@@ -64,6 +64,7 @@ def criar_agendamento(
             json=payload,
         )
         response.raise_for_status()
+        print("criar_agendamento response:", response.json())
         return response.json()
     except requests.exceptions.RequestException as e:
         return {"error": str(e)}
@@ -105,6 +106,7 @@ def listar_agendamentos(
             params=params,
         )
         response.raise_for_status()
+        print("listar_agendamentos response:", response.json())
         return response.json()
     except requests.exceptions.RequestException as e:
         return {"error": str(e)}

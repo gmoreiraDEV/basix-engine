@@ -43,6 +43,7 @@ def listar_profissionais(page: int = 1, pageSize: int = 50) -> dict:
             params=params,
         )
         response.raise_for_status()
+        print("listar_profissionais response:", response.json())
         return response.json()
     except requests.exceptions.RequestException as e:
         return {"error": str(e)}
@@ -80,6 +81,7 @@ def listar_servicos_profissional(
             params=params,
         )
         response.raise_for_status()
+        print("listar_servicos_profissional response:", response.json())
         return response.json()
     except requests.exceptions.RequestException as e:
         return {"error": str(e)}
