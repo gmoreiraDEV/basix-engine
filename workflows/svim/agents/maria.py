@@ -17,6 +17,7 @@ Arquitetura:
 """
 
 import os
+import re
 import json
 import logging
 from typing import TypedDict
@@ -72,6 +73,7 @@ class SVIMState(TypedDict):
     policies_context: Dict[str, Any]
     needs_handoff: bool
     finish_session: bool
+    system_prompt: str
 
 
 # ==================== Agente Principal ====================
@@ -159,12 +161,14 @@ class SVIMAgent(BaseAgent):
         workflow.add_node("load_context", self._load_context)
         workflow.add_node("detect_intent", self._detect_intent)
         workflow.add_node("generate_response", self._generate_response)
+        workflow.add_node("supervise_response", self._supervise_response)
         workflow.add_node("save_memory", self._save_memory)
 
         workflow.set_entry_point("load_context")
         workflow.add_edge("load_context", "detect_intent")
         workflow.add_edge("detect_intent", "generate_response")
-        workflow.add_edge("generate_response", "save_memory")
+        workflow.add_edge("generate_response", "supervise_response")
+        workflow.add_edge("supervise_response", "save_memory")
         workflow.add_edge("save_memory", END)
 
         return workflow.compile(checkpointer=MemorySaver())
@@ -283,6 +287,9 @@ class SVIMAgent(BaseAgent):
 
             recent_messages = state["messages"][-6:]
 
+            # Guardar o system prompt para o passo de supervisão
+            state["system_prompt"] = system_prompt
+
             # === 1. Chamada ao modelo com tools habilitadas ===
             response = await self.llm_client.chat_completion(
                 messages=recent_messages,
@@ -367,6 +374,124 @@ class SVIMAgent(BaseAgent):
                 "content": "Tive um erro ao processar sua solicitação. Pode tentar novamente?",
             })
             return state
+
+    async def _supervise_response(self, state: SVIMState) -> SVIMState:
+        """
+        Passo supervisor que valida a última resposta antes de enviar ao cliente.
+
+        Se encontrar violações (promessas vazias, narração interna, segredos ou placeholders),
+        solicita uma nova versão ao LLM sem essas falhas.
+        """
+        try:
+            last_assistant_idx = next(
+                (i for i in reversed(range(len(state["messages"]))) if state["messages"][i].get("role") == "assistant"),
+                None,
+            )
+
+            if last_assistant_idx is None:
+                return state
+
+            assistant_message = state["messages"][last_assistant_idx]
+            assistant_content = assistant_message.get("content", "")
+
+            if not isinstance(assistant_content, str):
+                return state
+
+            supervision_flags = self._get_supervision_flags(assistant_content)
+            if not supervision_flags:
+                return state
+
+            review_prompt = (
+                "Você é uma checadora de qualidade. Reescreva a última resposta da assistente "
+                "para o cliente garantindo que NÃO contenha: "
+                "promessas de retorno (ex.: 'vou ver e te retorno'), narração de processos internos, "
+                "exposição de credenciais/segredos ou placeholders como TODO/FIXME. Detectamos: "
+                f"{'; '.join(supervision_flags)}. Use apenas o que já está no contexto fornecido pelo sistema, "
+                "mantenha o tom educado em português do Brasil e devolva apenas a mensagem final pronta para o cliente."
+            )
+
+            revised_response = await self.llm_client.chat_completion(
+                messages=state["messages"][-6:],
+                system_prompt=f"{review_prompt}\n\nSystem prompt original:\n{state.get('system_prompt', '')}",
+                temperature=0.2,
+                max_tokens=400,
+            )
+
+            if isinstance(revised_response, str) and revised_response.strip():
+                state["messages"][last_assistant_idx]["content"] = revised_response.strip()
+
+            return state
+        except Exception as e:
+            logger.error(f"[SVIM] Error in supervise_response: {e}")
+            return state
+
+    def _get_supervision_flags(self, content: str) -> List[str]:
+        """Identifica padrões de falha e retorna os motivos encontrados."""
+        text = content.lower()
+
+        promise_patterns = [
+            "vou ver e te retorno",
+            "depois eu respondo",
+            "mais tarde te aviso",
+            "te retorno em breve",
+            "vou verificar e te aviso",
+            "já retorno",
+            "já te respondo",
+            "assim que possível te retorno",
+        ]
+
+        internal_patterns = [
+            "como modelo de linguagem",
+            "processo interno",
+            "cadeia de pensamento",
+            "analisando tokens",
+            "chamando a ferramenta",
+            "uso da ferramenta",
+            "executando ferramenta",
+            "rodando comando",
+            "passo a passo interno",
+        ]
+
+        placeholder_tokens = [
+            "<preencher",
+            "<placeholder>",
+            "[preencher]",
+            "preencher depois",
+        ]
+
+        placeholder_regexes = [
+            re.compile(r"\bTODO\b:?"),
+            re.compile(r"\bFIXME\b:?"),
+            re.compile(r"\[TODO\]"),
+        ]
+
+        secret_patterns = [
+            re.compile(r"sk-[a-z0-9]{8,}", re.IGNORECASE),
+            re.compile(r"bearer\s+[a-z0-9._-]{10,}", re.IGNORECASE),
+            re.compile(r"api[_-]?key", re.IGNORECASE),
+            re.compile(r"senha", re.IGNORECASE),
+            re.compile(r"token", re.IGNORECASE),
+            re.compile(r"eyj[a-z0-9_\-]{10,}\.[a-z0-9_\-]{10,}\.[a-z0-9_\-]{10,}", re.IGNORECASE),  # JWT
+            re.compile(r"-----BEGIN [A-Z ]+-----", re.IGNORECASE),
+        ]
+
+        reasons: List[str] = []
+
+        if any(pat in text for pat in promise_patterns):
+            reasons.append("promessa de retorno que não será cumprida")
+
+        if any(pat in text for pat in internal_patterns):
+            reasons.append("narração de passos internos")
+
+        if any(pat in text for pat in placeholder_tokens) or any(
+            pattern.search(content) for pattern in placeholder_regexes
+        ):
+            reasons.append("placeholder ou campo não preenchido")
+
+        if any(pattern.search(content) for pattern in secret_patterns):
+            reasons.append("possível exposição de segredo ou credencial")
+
+        return reasons
 
     async def _save_memory(self, state: SVIMState) -> SVIMState:
         """
@@ -456,6 +581,7 @@ class SVIMAgent(BaseAgent):
                 "policies_context": policies_context or {},
                 "needs_handoff": False,
                 "finish_session": False,
+                "system_prompt": "",
             }
 
             config = {"configurable": {"thread_id": state["session_id"]}}
