@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
@@ -24,6 +25,9 @@ class SVIMVectorStore:
         )
         vector = await self.embedder.embed(text)
 
+        enriched_metadata = metadata or {}
+        enriched_metadata.setdefault("timestamp", datetime.now().isoformat())
+
         point = PointStruct(
             id=str(uuid.uuid4()),
             vector=vector,
@@ -31,7 +35,7 @@ class SVIMVectorStore:
                 "user_id": user_id,
                 "session_id": session_id,
                 "messages": messages,
-                "metadata": metadata or {},
+                "metadata": enriched_metadata,
             },
         )
 
@@ -56,3 +60,35 @@ class SVIMVectorStore:
             context_messages.extend(msgs)
 
         return context_messages[-k:]  # só os k mais recentes
+
+    async def get_latest_metadata(self, user_id: str) -> Dict[str, Any]:
+        """
+        Retorna o metadata mais recente salvo para esse usuário.
+
+        Útil para restaurar `appointment_context` (ex.: appointment_draft) em cenários
+        one-shot onde o backend ainda não persistiu manualmente.
+        """
+        result, _ = self.client.scroll(
+            collection_name=self.collection,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))]
+            ),
+            limit=50,
+        )
+
+        latest = {}
+        latest_ts = None
+        for point in result:
+            metadata = point.payload.get("metadata") or {}
+            ts_raw = metadata.get("timestamp")
+            ts = None
+            try:
+                ts = datetime.fromisoformat(ts_raw) if ts_raw else None
+            except Exception:
+                ts = None
+
+            if ts is not None and (latest_ts is None or ts > latest_ts):
+                latest_ts = ts
+                latest = metadata
+
+        return latest

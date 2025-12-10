@@ -15,6 +15,7 @@ async def run_once(payload: Dict[str, Any]) -> Dict[str, Any]:
     user_id = payload.get("user_id", "anonymous")
     session_id = payload.get("session_id")
     customer_profile = payload.get("customer_profile", {})
+    appointment_context = payload.get("appointment_context", {})
     policies_context = payload.get("policies_context", {})
 
     # cria sessão de DB (usa DATABASE_URL do ambiente)
@@ -29,6 +30,7 @@ async def run_once(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "message": message,
                 "session_id": session_id,
                 "customer_profile": customer_profile,
+                "appointment_context": appointment_context,
                 "policies_context": policies_context,
             },
             user_id=user_id,
