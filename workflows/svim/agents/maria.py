@@ -452,13 +452,17 @@ class SVIMAgent(BaseAgent):
             "passo a passo interno",
         ]
 
-        placeholder_patterns = [
-            "todo",
-            "fixme",
+        placeholder_tokens = [
             "<preencher",
             "<placeholder>",
             "[preencher]",
             "preencher depois",
+        ]
+
+        placeholder_regexes = [
+            re.compile(r"\bTODO\b:?"),
+            re.compile(r"\bFIXME\b:?"),
+            re.compile(r"\[TODO\]"),
         ]
 
         secret_patterns = [
@@ -479,7 +483,9 @@ class SVIMAgent(BaseAgent):
         if any(pat in text for pat in internal_patterns):
             reasons.append("narração de passos internos")
 
-        if any(pat in text for pat in placeholder_patterns):
+        if any(pat in text for pat in placeholder_tokens) or any(
+            pattern.search(content) for pattern in placeholder_regexes
+        ):
             reasons.append("placeholder ou campo não preenchido")
 
         if any(pattern.search(content) for pattern in secret_patterns):
