@@ -4,7 +4,7 @@ namespace: company.svim
 tasks:
   - id: agent
     type: io.kestra.plugin.docker.Run
-    containerImage: gmoreiradev/svim-agent:v0.0.83
+    containerImage: gmoreiradev/svim-agent:v0.0.84
     
     env:
       SVIM_MESSAGE: "{{ trigger.body.message }}"
