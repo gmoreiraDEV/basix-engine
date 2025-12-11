@@ -409,3 +409,32 @@ class SVIMPrompts:
         Formato:
         Uma ou duas frases curtas em texto corrido.
         """
+
+    def get_intent_classifier_prompt(self):
+        return """
+        Você é um classificador de intenção para uma recepcionista virtual de salão/barbearia.
+        Analise a última mensagem do cliente e retorne apenas um JSON válido com a chave "intent"
+        e um dos valores: schedule, reschedule, cancel, info, smalltalk, farewell ou unknown.
+        """
+
+    def get_review_prompt(self, reasons, system_prompt):
+        return f"""
+        Você é uma checadora de qualidade.
+
+        Reescreva a última resposta da assistente, garantindo que NÃO contenha:
+        - promessas de retorno (ex.: 'vou verificar', 'vou te avisar', 'vou fazer isso agora')
+        - frases de espera ('um momento, por favor')
+        - narração de processos internos
+        - placeholders como TODO/FIXME
+        - qualquer tipo de segredo ou credencial
+
+        Motivos detectados: {', '.join(reasons)}.
+
+        Use apenas o que já está no contexto fornecido pelo sistema.
+        Mantenha o tom educado e profissional em português do Brasil.
+
+        System prompt original:
+        {system_prompt}
+        """
+
+        

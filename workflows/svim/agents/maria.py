@@ -219,11 +219,7 @@ class SVIMAgent(BaseAgent):
                     last_message = msg.get("content", "")
                     break
 
-            classifier_prompt = (
-                "Você é um classificador de intenção para uma recepcionista virtual de salão/barbearia. "
-                "Analise a última mensagem do cliente e retorne apenas um JSON válido com a chave "
-                '"intent" e um dos valores: schedule, reschedule, cancel, info, smalltalk, farewell ou unknown.'
-            )
+            classifier_prompt = self.prompts.get_intent_classifier_prompt()
 
             response = await self.llm_client.chat_completion(
                 messages=[{"role": "user", "content": last_message}],
@@ -363,7 +359,17 @@ class SVIMAgent(BaseAgent):
                 m["content"] for m in reversed(state["messages"]) if m["role"] == "user"
             ).lower()
 
-            state["finish_session"] = any(tok in last_user_msg for tok in SVIMIntent.FAREWELL.value)
+            farewell_tokens = [
+                "tchau",
+                "obrigado",
+                "obrigada",
+                "valeu",
+                "até mais",
+                "até logo",
+                "bom descanso",
+            ]
+
+            state["finish_session"] = any(tok in last_user_msg for tok in farewell_tokens)
 
             return state
 
@@ -401,14 +407,8 @@ class SVIMAgent(BaseAgent):
             if not supervision_flags:
                 return state
 
-            review_prompt = (
-                "Você é uma checadora de qualidade. Reescreva a última resposta da assistente "
-                "para o cliente garantindo que NÃO contenha: "
-                "promessas de retorno (ex.: 'vou ver e te retorno'), narração de processos internos, "
-                "exposição de credenciais/segredos ou placeholders como TODO/FIXME. Detectamos: "
-                f"{'; '.join(supervision_flags)}. Use apenas o que já está no contexto fornecido pelo sistema, "
-                "mantenha o tom educado em português do Brasil e devolva apenas a mensagem final pronta para o cliente."
-            )
+            review_prompt = self.prompts.get_review_prompt(supervision_flags, state.get('system_prompt'))
+
 
             revised_response = await self.llm_client.chat_completion(
                 messages=state["messages"][-6:],
@@ -429,6 +429,7 @@ class SVIMAgent(BaseAgent):
         """Identifica padrões de falha e retorna os motivos encontrados."""
         text = content.lower()
 
+        # 1) Padrões literais mais óbvios
         promise_patterns = [
             "vou ver e te retorno",
             "depois eu respondo",
@@ -438,6 +439,26 @@ class SVIMAgent(BaseAgent):
             "já retorno",
             "já te respondo",
             "assim que possível te retorno",
+        ]
+
+        # 2) Padrões mais genéricos com regex
+        promise_regexes = [
+            # vou / vamos / iremos + verbo de checagem
+            re.compile(
+                r"\b(vou|vamos|iremos)\s+"
+                r"(verificar|checar|consultar|conferir|olhar|procurar|analisar|ver)\b",
+                re.IGNORECASE,
+            ),
+            # "vou fazer isso agora"
+            re.compile(
+                r"\b(vou|vamos|iremos)\s+fazer\s+isso\s+agora\b",
+                re.IGNORECASE,
+            ),
+            # opcional: "um momento, por favor"
+            re.compile(
+                r"\bum momento,?\s+por favor\b",
+                re.IGNORECASE,
+            ),
         ]
 
         internal_patterns = [
@@ -460,9 +481,9 @@ class SVIMAgent(BaseAgent):
         ]
 
         placeholder_regexes = [
-            re.compile(r"\bTODO\b:?"),
-            re.compile(r"\bFIXME\b:?"),
-            re.compile(r"\[TODO\]"),
+            re.compile(r"\bTODO\b:?", re.IGNORECASE),
+            re.compile(r"\bFIXME\b:?", re.IGNORECASE),
+            re.compile(r"\[TODO\]", re.IGNORECASE),
         ]
 
         secret_patterns = [
@@ -471,23 +492,33 @@ class SVIMAgent(BaseAgent):
             re.compile(r"api[_-]?key", re.IGNORECASE),
             re.compile(r"senha", re.IGNORECASE),
             re.compile(r"token", re.IGNORECASE),
-            re.compile(r"eyj[a-z0-9_\-]{10,}\.[a-z0-9_\-]{10,}\.[a-z0-9_\-]{10,}", re.IGNORECASE),  # JWT
+            re.compile(
+                r"eyj[a-z0-9_\-]{10,}\.[a-z0-9_\-]{10,}\.[a-z0-9_\-]{10,}",
+                re.IGNORECASE,
+            ),  # JWT
             re.compile(r"-----BEGIN [A-Z ]+-----", re.IGNORECASE),
         ]
 
         reasons: List[str] = []
 
-        if any(pat in text for pat in promise_patterns):
-            reasons.append("promessa de retorno que não será cumprida")
+        # Promessas / ações futuras vagas
+        if (
+            any(pat in text for pat in promise_patterns)
+            or any(regex.search(content) for regex in promise_regexes)
+        ):
+            reasons.append("promessa de retorno ou ação futura vaga que pode não ser cumprida")
 
+        # Narração interna
         if any(pat in text for pat in internal_patterns):
             reasons.append("narração de passos internos")
 
+        # Placeholders
         if any(pat in text for pat in placeholder_tokens) or any(
             pattern.search(content) for pattern in placeholder_regexes
         ):
             reasons.append("placeholder ou campo não preenchido")
 
+        # Segredos / credenciais
         if any(pattern.search(content) for pattern in secret_patterns):
             reasons.append("possível exposição de segredo ou credencial")
 
