@@ -270,12 +270,16 @@ class SVIMAgent(BaseAgent):
             customer_name = state["customer_profile"].get("name") or "cliente"
             base_context = f"Histórico recente:\n{history}\n\nCliente: {customer_name}"
 
-            # Escolher prompt conforme intenção
             if state["intent"] in [SVIMIntent.SCHEDULE, SVIMIntent.RESCHEDULE, SVIMIntent.CANCEL]:
+                cliente_id_context = (
+                    state["customer_profile"].get("clienteId")  
+                    or state["customer_profile"].get("id")      
+                    or state["user_id"]                         
+                )
                 system_prompt = self.prompts.get_scheduling_prompt(
                     context=state,
-                    cliente_id=state["user_id"],
-                    cliente_nome=state["customer_profile"]["name"],
+                    cliente_id=cliente_id_context,
+                    cliente_nome=state["customer_profile"].get("name"),
                 )
             elif state["intent"] == SVIMIntent.INFO:
                 policies = state["policies_context"].get("policies_text", "")
@@ -314,14 +318,54 @@ class SVIMAgent(BaseAgent):
                 tool_name = response["tool"]["name"]
                 tool_args = response["tool"]["arguments"]
 
-                tool_data = next((t for t in self.tools if t["name"] == tool_name), None)
-                if not tool_data:
-                    raise ValueError(f"Tool '{tool_name}' não encontrada")
-                
-                tool_fn = tool_data["py_fn"]
+                # Garante que tool_args é dict (caso venha como string JSON)
+                if isinstance(tool_args, str):
+                    try:
+                        tool_args = json.loads(tool_args)
+                    except json.JSONDecodeError:
+                        logger.error(f"[SVIM] Invalid tool arguments JSON for {tool_name}: {tool_args}")
+                        tool_args = {}
 
-                logger.info(f"[SVIM] Executing tool: {tool_name} with args: {tool_args}")
-                tool_result = await tool_fn.ainvoke(tool_args)
+                # 🔒 Forçar clienteId correto quando for criar_agendamento
+                if tool_name == "criar_agendamento":
+                    canonical_cliente_id = (
+                        state["customer_profile"].get("clienteId")
+                        or state["customer_profile"].get("id")
+                        or state["user_id"]
+                    )
+
+                    if not canonical_cliente_id:
+                        logger.error("[SVIM] canonical_cliente_id ausente no contexto; abortando criar_agendamento")
+                        tool_result = {
+                            "error": "CLIENTE_ID_AUSENTE",
+                            "detail": "clienteId não disponível no contexto do cliente."
+                        }
+                    else:
+                        tool_args["clienteId"] = canonical_cliente_id
+                        logger.info(
+                            f"[SVIM] Forçando clienteId={canonical_cliente_id} em criar_agendamento "
+                            f"(ignorando o valor sugerido pela LLM)."
+                        )
+
+                        tool_data = next((t for t in self.tools if t["name"] == tool_name), None)
+                        if not tool_data:
+                            raise ValueError(f"Tool '{tool_name}' não encontrada")
+
+                        tool_fn = tool_data["py_fn"]
+
+                        logger.info(f"[SVIM] Executing tool: {tool_name} with args: {tool_args}")
+                        tool_result = await tool_fn.ainvoke(tool_args)
+                else:
+                    # fluxo normal para outras tools
+                    tool_data = next((t for t in self.tools if t["name"] == tool_name), None)
+                    if not tool_data:
+                        raise ValueError(f"Tool '{tool_name}' não encontrada")
+
+                    tool_fn = tool_data["py_fn"]
+
+                    logger.info(f"[SVIM] Executing tool: {tool_name} with args: {tool_args}")
+                    tool_result = await tool_fn.ainvoke(tool_args)
+
                 logger.info(f"[SVIM] Tool result: {tool_result}")
 
                 # Inserir chamada na conversa (formato OpenAI)
@@ -363,8 +407,17 @@ class SVIMAgent(BaseAgent):
                 m["content"] for m in reversed(state["messages"]) if m["role"] == "user"
             ).lower()
 
-            state["finish_session"] = any(tok in last_user_msg for tok in SVIMIntent.FAREWELL.value)
+            farewell_tokens = [
+                "tchau",
+                "obrigado",
+                "obrigada",
+                "valeu",
+                "até mais",
+                "até logo",
+                "bom descanso",
+            ]
 
+            state["finish_session"] = any(tok in last_user_msg for tok in farewell_tokens)
             return state
 
         except Exception as e:
