@@ -94,7 +94,7 @@ class SVIMPrompts:
     def get_scheduling_prompt(
         self,
         context: Dict[str, Any],
-        cliente_id: int,
+        cliente_id: str | int,
         cliente_nome: str | None = None,
     ) -> str:
         """Prompt focado em agendamento / reagendamento / cancelamento.
@@ -437,4 +437,85 @@ class SVIMPrompts:
         {system_prompt}
         """
 
-        
+    def get_post_tool_prompt(
+        self,
+        base_system_prompt: str,
+        tool_name: str,
+        attempts: int,
+        max_attempts: int,
+    ) -> str:
+        """
+        Prompt usado na segunda chamada ao LLM, depois de executar uma ferramenta.
+
+        Objetivo:
+        - Fazer a Maria usar o resultado da tool (incluindo erros) para responder ao cliente.
+        - Evitar loop infinito de tools.
+        - Forçar honestidade quando já bateu limite de tentativas.
+        """
+
+        # Parte comum: regras gerais da Maria
+        core_rules = f"""
+        Você é Maria, a recepcionista virtual da SVIM (salão / estética / barbearia).
+
+        Você já chamou uma ferramenta interna (`{tool_name}`) para ajudar o cliente
+        e acabou de receber a RESPOSTA dessa ferramenta no histórico da conversa
+        (uma mensagem com role "tool", em formato JSON).
+
+        Agora, sua tarefa é:
+        - Ler com atenção a última resposta da ferramenta.
+        - Interpretar os campos retornados (por exemplo: "data", "error", "status", "detail").
+        - Responder AO CLIENTE em português do Brasil, de forma educada, clara e honesta.
+        - Não cite nomes de ferramentas, APIs ou estruturas internas.
+        - Não descreva passo a passo técnico do que aconteceu.
+        - Não prometa que "a equipe vai entrar em contato" automaticamente.
+        - Não diga que o agendamento foi concluído se a ferramenta retornou erro.
+
+        Erros comuns que podem aparecer:
+        - "error": "PROFISSIONAL_NAO_ENCONTRADO"
+            - Explique que não foi possível encontrar esse profissional no sistema
+              e peça para o cliente confirmar o nome ou escolher outra opção.
+        - "error": "HTTP_ERROR" ou "REQUEST_ERROR"
+            - Explique de forma simples que houve um problema ao acessar o sistema
+              e ofereça alternativas (como tentar de novo, escolher outro profissional, etc.).
+        - "error": "TIMEOUT"
+            - Explique que o sistema demorou para responder e que é melhor tentar novamente
+              ou ajustar o pedido.
+
+        Nunca invente dados que não estejam no contexto.
+        Sempre que tiver dúvida, peça mais informações para o cliente.
+        """
+
+        # Comportamento diferente dependendo do número de tentativas
+        if attempts < max_attempts:
+            attempts_section = f"""
+            Você já tentou usar a ferramenta `{tool_name}` {attempts} vez(es),
+            ainda abaixo do limite de {max_attempts} tentativas definidas pelo sistema.
+
+            Agora, com base na resposta da ferramenta que acabou de chegar:
+            - Use essas informações para responder ao cliente.
+            - NÃO chame novas ferramentas nesta resposta.
+            - Foque em explicar o que aconteceu ou em seguir o fluxo com o que já foi retornado.
+            """
+        else:
+            attempts_section = f"""
+            Você já tentou usar a ferramenta `{tool_name}` {attempts} vez(es),
+            atingindo ou ultrapassando o limite de {max_attempts} tentativas.
+
+            A partir de agora:
+            - NÃO tente usar nenhuma ferramenta novamente.
+            - NÃO tente "adivinhar" dados que a ferramenta não retornou.
+            - Explique ao cliente, de forma transparente, que houve um problema ao acessar o sistema.
+            - Peça para o cliente confirmar informações (por exemplo, nome do profissional, data, horário)
+              ou ofereça alternativas seguras (como escolher outro profissional ou outro horário).
+            - Se fizer sentido, você pode sugerir que um atendente humano finalize o processo,
+              mas sem prometer ações automáticas fora desta conversa.
+            """
+
+        # Junta tudo com o prompt base que você já usa (base_system_prompt)
+        return (
+            base_system_prompt
+            + "\n\n"
+            + core_rules.strip()
+            + "\n\n"
+            + attempts_section.strip()
+        )

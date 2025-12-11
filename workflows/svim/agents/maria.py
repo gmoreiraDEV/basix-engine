@@ -74,6 +74,7 @@ class SVIMState(TypedDict):
     needs_handoff: bool
     finish_session: bool
     system_prompt: str
+    tool_attempts: Dict[str, int]
 
 
 # ==================== Agente Principal ====================
@@ -89,6 +90,9 @@ class SVIMAgent(BaseAgent):
     - Mantém memória de conversas para contexto
     """
 
+    # Máximo de tentativas lógicas por ferramenta (para esta mensagem)
+    MAX_TOOL_LOGICAL_RETRIES = 2
+
     def __init__(self, config: Optional[Dict[str, Any]] = None, db_session: Optional[Session] = None):
         # Config padrão
         config = config or {}
@@ -96,7 +100,6 @@ class SVIMAgent(BaseAgent):
         config.setdefault("qdrant_api_key", os.getenv("QDRANT_API_KEY", None))
         config.setdefault("qdrant_collection_name", "svim_conversations")
         config.setdefault("qdrant_vector_size", 1536)
-
 
         # Inicializa EnhancedAgentBase
         super().__init__(
@@ -120,7 +123,7 @@ class SVIMAgent(BaseAgent):
             self.qdrant_client,
             collection_name=config["qdrant_collection_name"],
             vector_size=config["qdrant_vector_size"],
-        )   
+        )
 
         self.vector_store = SVIMVectorStore(
             client=self.qdrant_client,
@@ -182,6 +185,7 @@ class SVIMAgent(BaseAgent):
         """
         try:
             state.setdefault("appointment_context", {})
+            state.setdefault("tool_attempts", {})
 
             # Restaura o último appointment_context salvo (se backend não enviou nada)
             if not state["appointment_context"]:
@@ -262,6 +266,8 @@ class SVIMAgent(BaseAgent):
         Suporta chamadas de ferramentas (tools).
         """
         try:
+            state.setdefault("tool_attempts", {})
+
             history = state["appointment_context"].get("history", "")
             customer_name = state["customer_profile"].get("name") or "cliente"
             base_context = f"Histórico recente:\n{history}\n\nCliente: {customer_name}"
@@ -271,7 +277,7 @@ class SVIMAgent(BaseAgent):
                 system_prompt = self.prompts.get_scheduling_prompt(
                     context=state,
                     cliente_id=state["user_id"],
-                    cliente_nome=state["customer_profile"]["name"],
+                    cliente_nome=state["customer_profile"].get("name", "cliente"),
                 )
             elif state["intent"] == SVIMIntent.INFO:
                 policies = state["policies_context"].get("policies_text", "")
@@ -310,15 +316,20 @@ class SVIMAgent(BaseAgent):
                 tool_name = response["tool"]["name"]
                 tool_args = response["tool"]["arguments"]
 
+                # Atualiza contador de tentativas lógicas desta tool
+                attempts = state["tool_attempts"].get(tool_name, 0) + 1
+                state["tool_attempts"][tool_name] = attempts
+                print(f"[SVIM] Tool '{tool_name}' logical attempt #{attempts}")
+
                 tool_data = next((t for t in self.tools if t["name"] == tool_name), None)
                 if not tool_data:
                     raise ValueError(f"Tool '{tool_name}' não encontrada")
-                
+
                 tool_fn = tool_data["py_fn"]
 
-                logger.info(f"[SVIM] Executing tool: {tool_name} with args: {tool_args}")
+                print(f"[SVIM] Executing tool: {tool_name} with args: {tool_args}")
                 tool_result = await tool_fn.ainvoke(tool_args)
-                logger.info(f"[SVIM] Tool result: {tool_result}")
+                print(f"[SVIM] Tool result: {tool_result}")
 
                 # Inserir chamada na conversa (formato OpenAI)
                 state["messages"].append({
@@ -343,9 +354,19 @@ class SVIMAgent(BaseAgent):
                 })
 
                 # === 4. Segunda chamada para resposta final ===
+                # Aqui acontece o "retry lógico": a LLM vê o erro/sucesso da tool
+                # e decide se explica o problema ou segue o fluxo.
+                # Não permitimos novas tool calls nesta etapa para evitar loop.
+                final_system_prompt = self.prompts.get_post_tool_prompt(
+                    base_system_prompt=system_prompt,
+                    tool_name=tool_name,
+                    attempts=attempts,
+                    max_attempts=self.MAX_TOOL_LOGICAL_RETRIES,
+                )
+
                 final_response = await self.llm_client.chat_completion(
                     messages=state["messages"],
-                    system_prompt=system_prompt,
+                    system_prompt=final_system_prompt,
                     temperature=0.3,
                 )
 
@@ -355,6 +376,7 @@ class SVIMAgent(BaseAgent):
                     "timestamp": datetime.now().isoformat(),
                 })
 
+            # Atualiza finish_session com base na última mensagem do usuário
             last_user_msg = next(
                 m["content"] for m in reversed(state["messages"]) if m["role"] == "user"
             ).lower()
@@ -407,12 +429,14 @@ class SVIMAgent(BaseAgent):
             if not supervision_flags:
                 return state
 
-            review_prompt = self.prompts.get_review_prompt(supervision_flags, state.get('system_prompt'))
-
+            review_prompt = self.prompts.get_review_prompt(
+                supervision_flags,
+                state.get('system_prompt', ''),
+            )
 
             revised_response = await self.llm_client.chat_completion(
                 messages=state["messages"][-6:],
-                system_prompt=f"{review_prompt}\n\nSystem prompt original:\n{state.get('system_prompt', '')}",
+                system_prompt=review_prompt,
                 temperature=0.2,
                 max_tokens=400,
             )
@@ -613,6 +637,7 @@ class SVIMAgent(BaseAgent):
                 "needs_handoff": False,
                 "finish_session": False,
                 "system_prompt": "",
+                "tool_attempts": {},
             }
 
             config = {"configurable": {"thread_id": state["session_id"]}}
@@ -646,7 +671,6 @@ class SVIMAgent(BaseAgent):
                 "error": str(e),
                 "response": "Tive um erro aqui do meu lado, mas quero te ajudar. Pode tentar novamente por favor?",
             }
-
 
     async def process(self, input_data: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
         """
