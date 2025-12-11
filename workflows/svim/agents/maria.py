@@ -274,9 +274,16 @@ class SVIMAgent(BaseAgent):
 
             # Escolher prompt conforme intenção
             if state["intent"] in [SVIMIntent.SCHEDULE, SVIMIntent.RESCHEDULE, SVIMIntent.CANCEL]:
+                # tenta pegar o clienteId "real" vindo do backend
+                cliente_id_context = (
+                    state["customer_profile"].get("clienteId")  # ideal
+                    or state["customer_profile"].get("id")      # fallback, se você usar outro campo
+                    or state["user_id"]                         # último recurso
+                )
+
                 system_prompt = self.prompts.get_scheduling_prompt(
                     context=state,
-                    cliente_id=state["user_id"],
+                    cliente_id=cliente_id_context,
                     cliente_nome=state["customer_profile"].get("name", "cliente"),
                 )
             elif state["intent"] == SVIMIntent.INFO:
@@ -314,12 +321,29 @@ class SVIMAgent(BaseAgent):
             if "tool" in response:
                 tool_id = response["tool"]["id"]
                 tool_name = response["tool"]["name"]
-                tool_args = response["tool"]["arguments"]
+
+                # Normaliza arguments: pode vir como dict ou string JSON
+                raw_args = response["tool"]["arguments"]
+                if isinstance(raw_args, str):
+                    try:
+                        tool_args = json.loads(raw_args)
+                    except json.JSONDecodeError:
+                        print(f"[SVIM] Invalid JSON in tool arguments for '{tool_name}': {raw_args}")
+                        tool_args = {}
+                else:
+                    tool_args = raw_args or {}
 
                 # Atualiza contador de tentativas lógicas desta tool
                 attempts = state["tool_attempts"].get(tool_name, 0) + 1
                 state["tool_attempts"][tool_name] = attempts
                 print(f"[SVIM] Tool '{tool_name}' logical attempt #{attempts}")
+
+                # Descobre o clienteId canônico vindo do contexto
+                canonical_cliente_id = (
+                    state["customer_profile"].get("clienteId")
+                    or state["customer_profile"].get("id")
+                    or state["user_id"]
+                )
 
                 tool_data = next((t for t in self.tools if t["name"] == tool_name), None)
                 if not tool_data:
@@ -327,9 +351,30 @@ class SVIMAgent(BaseAgent):
 
                 tool_fn = tool_data["py_fn"]
 
-                print(f"[SVIM] Executing tool: {tool_name} with args: {tool_args}")
-                tool_result = await tool_fn.ainvoke(tool_args)
-                print(f"[SVIM] Tool result: {tool_result}")
+                 # 🔒 Regra especial para criar_agendamento: NUNCA confiar na LLM para clienteId
+                if tool_name == "criar_agendamento":
+                    if not canonical_cliente_id:
+                        print("[SVIM] canonical_cliente_id ausente; não vou chamar criar_agendamento")
+                        tool_result = {
+                            "error": "CLIENTE_ID_AUSENTE",
+                            "detail": "clienteId não disponível no contexto do cliente."
+                        }
+                    else:
+                        tool_args["clienteId"] = canonical_cliente_id
+                        print(
+                            f"[SVIM] Forçando clienteId={canonical_cliente_id} em criar_agendamento "
+                            f"(ignorando o valor sugerido pela LLM)."
+                        )
+
+                        print(f"[SVIM] Executing tool: {tool_name} with args: {tool_args}")
+                        tool_result = await tool_fn.ainvoke(tool_args)
+                        print(f"[SVIM] Tool result: {tool_result}")
+                else:
+                    # Fluxo normal para outras tools
+                    print(f"[SVIM] Executing tool: {tool_name} with args: {tool_args}")
+                    tool_result = await tool_fn.ainvoke(tool_args)
+                    print(f"[SVIM] Tool result: {tool_result}")
+
 
                 # Inserir chamada na conversa (formato OpenAI)
                 state["messages"].append({
