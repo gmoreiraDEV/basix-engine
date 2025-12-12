@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -92,3 +93,16 @@ class SVIMVectorStore:
                 latest = metadata
 
         return latest
+
+
+def embed_text(text: str) -> List[float]:
+    """
+    Fallback de embedding determinístico para cenários sem dependência externa.
+
+    Utiliza um hash simples para produzir um vetor estável de 6 dimensões.
+    """
+
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    # Converte os primeiros bytes em floats simples entre 0 e 1
+    vector = [int.from_bytes(digest[i : i + 4], "big") / 2**32 for i in range(0, 24, 4)]
+    return vector

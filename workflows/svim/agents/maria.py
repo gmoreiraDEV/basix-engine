@@ -40,6 +40,8 @@ from agents.llm_client import LLMClient
 from agents.vector_store import SVIMVectorStore
 from agents.base_agent import BaseAgent
 from agents.tools.index import TOOLS
+from agents.resolvers.service import resolve_service, resolve_professional
+from agents.resolvers.customer import resolve_cliente_id
 
 # Prompts da SVIM
 from agents.prompts import SVIMPrompts
@@ -281,6 +283,7 @@ class SVIMAgent(BaseAgent):
                     or state["user_id"]                         # último recurso
                 )
 
+                state = await self._prepare_appointment_context(state)
                 system_prompt = self.prompts.get_scheduling_prompt(
                     context=state,
                     cliente_id=cliente_id_context,
@@ -351,28 +354,24 @@ class SVIMAgent(BaseAgent):
 
                 tool_fn = tool_data["py_fn"]
 
-                 # 🔒 Regra especial para criar_agendamento: NUNCA confiar na LLM para clienteId
                 if tool_name == "criar_agendamento":
-                    if not canonical_cliente_id:
-                        print("[SVIM] canonical_cliente_id ausente; não vou chamar criar_agendamento")
-                        tool_result = {
-                            "error": "CLIENTE_ID_AUSENTE",
-                            "detail": "clienteId não disponível no contexto do cliente."
-                        }
-                    else:
-                        tool_args["clienteId"] = canonical_cliente_id
-                        print(
-                            f"[SVIM] Forçando clienteId={canonical_cliente_id} em criar_agendamento "
-                            f"(ignorando o valor sugerido pela LLM)."
-                        )
-
-                        print(f"[SVIM] Executing tool: {tool_name} with args: {tool_args}")
-                        tool_result = await tool_fn.ainvoke(tool_args)
-                        print(f"[SVIM] Tool result: {tool_result}")
+                    draft = state.get("appointment_context", {}).get("appointment_draft", {})
+                    merged_args = {
+                        "servicoId": draft.get("serviceId"),
+                        "profissionalId": draft.get("professionalId"),
+                        "dataHoraInicio": draft.get("dateTimeIso") or tool_args.get("dataHoraInicio"),
+                        "duracaoEmMinutos": draft.get("durationMinutes") or tool_args.get("duracaoEmMinutos"),
+                        "valor": draft.get("price") or tool_args.get("valor"),
+                        "observacoes": draft.get("notes") or tool_args.get("observacoes", ""),
+                        "confirmado": tool_args.get("confirmado", False),
+                    }
+                    merged_args.update({k: v for k, v in tool_args.items() if k not in merged_args or merged_args[k] is None})
+                    print(f"[SVIM] Executing tool: {tool_name} with args: {merged_args}")
+                    tool_result = await tool_fn(merged_args, state)
+                    print(f"[SVIM] Tool result: {tool_result}")
                 else:
-                    # Fluxo normal para outras tools
                     print(f"[SVIM] Executing tool: {tool_name} with args: {tool_args}")
-                    tool_result = await tool_fn.ainvoke(tool_args)
+                    tool_result = await tool_fn(**tool_args) if isinstance(tool_args, dict) else await tool_fn(tool_args)
                     print(f"[SVIM] Tool result: {tool_result}")
 
 
@@ -592,6 +591,56 @@ class SVIMAgent(BaseAgent):
             reasons.append("possível exposição de segredo ou credencial")
 
         return reasons
+
+    async def _prepare_appointment_context(self, state: SVIMState) -> SVIMState:
+        """Resolve IDs de profissional/serviço sem depender do LLM."""
+
+        state.setdefault("appointment_context", {})
+        appointment_draft = state["appointment_context"].get("appointment_draft") or {}
+        state["appointment_context"]["appointment_draft"] = appointment_draft
+
+        # texto da última mensagem do usuário
+        last_user_message = next(
+            (msg.get("content", "") for msg in reversed(state["messages"]) if msg.get("role") == "user"),
+            "",
+        )
+
+        # Resolver profissional
+        if not appointment_draft.get("professionalId"):
+            try:
+                profs = await self.tools[0]["py_fn"]()
+                professionals_list = profs.get("data") or profs.get("profissionais") or profs.get("items") or []
+                resolved_prof = resolve_professional(last_user_message, professionals_list)
+                if resolved_prof:
+                    appointment_draft["professionalId"] = resolved_prof.get("id")
+                    appointment_draft["professionalName"] = resolved_prof.get("nome") or resolved_prof.get("name")
+                    appointment_draft["professional"] = resolved_prof
+            except Exception as exc:
+                logger.error("Erro ao resolver profissional", exc_info=exc)
+
+        # Resolver serviço quando profissional já conhecido
+        if appointment_draft.get("professionalId") and not appointment_draft.get("serviceId"):
+            try:
+                services_result = await self.tools[1]["py_fn"](
+                    profissionalId=appointment_draft["professionalId"]
+                )
+                services_list = services_result.get("data") or services_result.get("servicos") or services_result.get("items") or []
+                resolved_service = resolve_service(
+                    last_user_message,
+                    appointment_draft.get("professionalId"),
+                    services_list,
+                )
+                if resolved_service:
+                    appointment_draft["serviceId"] = resolved_service.get("id")
+                    appointment_draft["serviceName"] = resolved_service.get("nome") or resolved_service.get("name")
+                    appointment_draft["durationMinutes"] = resolved_service.get("duracaoEmMinutos") or resolved_service.get("duracao")
+                    appointment_draft["price"] = resolved_service.get("valor") or resolved_service.get("preco")
+                    appointment_draft["service"] = resolved_service
+            except Exception as exc:
+                logger.error("Erro ao resolver serviço", exc_info=exc)
+
+        state["appointment_context"]["appointment_draft"] = appointment_draft
+        return state
 
     async def _save_memory(self, state: SVIMState) -> SVIMState:
         """
