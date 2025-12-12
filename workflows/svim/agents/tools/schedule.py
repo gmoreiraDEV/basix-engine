@@ -1,112 +1,52 @@
 import requests
-from langchain.tools import tool
-import os
-from dotenv import load_dotenv
+from typing import Any, Dict, Optional
 
-load_dotenv()
-X_API_TOKEN = os.getenv("X_API_TOKEN")
-ESTABELECIMENTO_ID = os.getenv("ESTABELECIMENTO_ID")
-URL_BASE = os.getenv("URL_BASE")
-
-headers = {
-    "X-Api-Key": X_API_TOKEN,
-    "Accept": "application/json",
-    "Content-Type": "application/json",
-    "estabelecimentoId": ESTABELECIMENTO_ID,
-}
+from agents.http_client import get_http_client
+from agents.resolvers.customer import resolve_cliente_id
 
 
-@tool
-def criar_agendamento(
-    servicoId: int,
-    clienteId: int,
-    profissionalId: int,
-    dataHoraInicio: str,
-    duracaoEmMinutos: int,
-    valor: int,
-    observacoes: str,
-    confirmado: bool,
-) -> dict:
-    """
-    Tool: Agendamento
-    Descrição: Cria um agendamento na API Trinks.
+async def criar_agendamento_tool(args: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
+    cliente_id = resolve_cliente_id(state)
+    if cliente_id is None:
+        return {"error": "CLIENTE_NAO_IDENTIFICADO"}
 
-    Args:
-        servicoId (int): ID do serviço.
-        clienteId (int): ID do cliente.
-        profissionalId (int): ID do profissional.
-        dataHoraInicio (str): Data/hora no formato ISO (ex: "2025-12-10T15:00:00").
-        duracaoEmMinutos (int): Duração do atendimento em minutos.
-        valor (int): Valor em centavos ou unidades usadas pelo sistema.
-        observacoes (str): Observações adicionais.
-        confirmado (bool): Se o agendamento já deve ficar confirmado.
+    required_fields = [
+        "servicoId",
+        "profissionalId",
+        "dataHoraInicio",
+        "duracaoEmMinutos",
+        "valor",
+        "observacoes",
+        "confirmado",
+    ]
+    missing = [field for field in required_fields if field not in args]
+    if missing:
+        return {"error": "ARGS_INVALIDOS", "missing": missing}
 
-    Returns:
-        dict: JSON do agendamento criado ou {"error": "..."}.
-    """
     payload = {
-        "servicoId": servicoId,
-        "clienteId": clienteId,
-        "profissionalId": profissionalId,
-        "dataHoraInicio": dataHoraInicio,
-        "duracaoEmMinutos": duracaoEmMinutos,
-        "valor": valor,
-        "observacoes": observacoes,
-        "confirmado": confirmado,
+        "servicoId": int(args["servicoId"]),
+        "clienteId": cliente_id,
+        "profissionalId": int(args["profissionalId"]),
+        "dataHoraInicio": args["dataHoraInicio"],
+        "duracaoEmMinutos": int(args["duracaoEmMinutos"]),
+        "valor": int(args["valor"]),
+        "observacoes": args.get("observacoes", ""),
+        "confirmado": bool(args.get("confirmado", False)),
     }
 
-    print("criar_agendamento", payload)
-
-    try:
-        response = requests.post(
-            f"{URL_BASE}/agendamentos",
-            headers=headers,
-            json=payload,
-        )
-        response.raise_for_status()
-        print("criar_agendamento response:", response.json())
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return {"error": str(e)}
+    client = get_http_client()
+    return client.post("/agendamentos", json=payload)
 
 
-@tool
-def listar_agendamentos(
-    dataInicio: str,
-    dataFim: str,
-    clienteId: int | None = None,
-) -> dict:
-    """
-    Tool: Listar Agendamentos
-    Descrição: Lista agendamentos em um intervalo de datas.
-
-    Args:
-        dataInicio (str): Data de início (ex: "2025-12-01").
-        dataFim (str): Data de fim (ex: "2025-12-31").
-        clienteId (int | None): ID do cliente (opcional).
-
-    Returns:
-        dict: JSON com a lista de agendamentos ou {"error": "..."}.
-    """
-    params: dict[str, Any] = {
+async def listar_agendamentos_tool(args: Dict[str, Any], state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    params: Dict[str, Any] = {
         "page": 1,
         "pageSize": 50,
-        "dataInicio": dataInicio,
-        "dataFim": dataFim,
+        "dataInicio": args.get("dataInicio"),
+        "dataFim": args.get("dataFim"),
     }
+    if args.get("clienteId"):
+        params["clienteId"] = args.get("clienteId")
 
-    print("listar_agendamentos", params)
-    if clienteId is not None:
-        params["clienteId"] = clienteId
-
-    try:
-        response = requests.get(
-            f"{URL_BASE}/agendamentos",
-            headers=headers,
-            params=params,
-        )
-        response.raise_for_status()
-        print("listar_agendamentos response:", response.json())
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return {"error": str(e)}
+    client = get_http_client()
+    return client.get("/agendamentos", params=params)

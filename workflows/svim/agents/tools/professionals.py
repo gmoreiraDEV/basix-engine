@@ -1,87 +1,26 @@
 from langchain.tools import tool
-import requests
-import os
-from dotenv import load_dotenv
+from typing import Any, Dict
 
-load_dotenv()
-X_API_TOKEN = os.getenv("X_API_TOKEN")
-ESTABELECIMENTO_ID = os.getenv("ESTABELECIMENTO_ID")
-URL_BASE = os.getenv("URL_BASE")
-
-headers = {
-    "X-Api-Key": X_API_TOKEN,
-    "Accept": "application/json",
-    "Content-Type": "application/json",
-    "estabelecimentoId": ESTABELECIMENTO_ID,
-}
+from agents.http_client import get_http_client
 
 
-@tool
-def listar_profissionais(page: int = 1, pageSize: int = 50) -> dict:
-    """
-    Tool: Listar Profissionais
-    Descrição: Lista os profissionais do estabelecimento.
-
-    Args:
-        page (int): Número da página (default 1).
-        pageSize (int): Tamanho da página (default 50).
-
-    Returns:
-        dict: Resposta JSON da API Trinks, ou {"error": "..."} em caso de erro.
-    """
+async def listar_profissionais_tool(page: int = 1, pageSize: int = 50) -> dict:
     params = {
         "page": page,
         "pageSize": pageSize,
     }
-
-    print("listar_profissionais", params)
-
-    try:
-        response = requests.get(
-            f"{URL_BASE}/profissionais",
-            headers=headers,
-            params=params,
-        )
-        response.raise_for_status()
-        print("listar_profissionais response:", response.json())
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return {"error": str(e)}
+    client = get_http_client()
+    return client.get("/profissionais", params=params)
 
 
-@tool
-def listar_servicos_profissional(
+async def listar_servicos_profissional_tool(
     profissionalId: int,
     page: int = 1,
     pageSize: int = 50,
 ) -> dict:
-    """
-    Tool: Listar Serviços de um Profissional
-    Descrição: Lista os serviços de um profissional específico.
-
-    Args:
-        profissionalId (int): ID do profissional.
-        page (int): Número da página (default 1).
-        pageSize (int): Tamanho da página (default 50).
-
-    Returns:
-        dict: Resposta JSON da API Trinks, ou {"error": "..."} em caso de erro.
-    """
     params = {
         "page": page,
         "pageSize": pageSize,
     }
-
-    print("listar_servicos_profissional", params)
-
-    try:
-        response = requests.get(
-            f"{URL_BASE}/profissionais/{profissionalId}/servicos",
-            headers=headers,
-            params=params,
-        )
-        response.raise_for_status()
-        print("listar_servicos_profissional response:", response.json())
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return {"error": str(e)}
+    client = get_http_client()
+    return client.get(f"/profissionais/{profissionalId}/servicos", params=params)

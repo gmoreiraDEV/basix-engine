@@ -1,6 +1,6 @@
-from .professionals import listar_profissionais, listar_servicos_profissional
-from .services import listar_servicos
-from .schedule import criar_agendamento, listar_agendamentos
+from .professionals import listar_profissionais_tool, listar_servicos_profissional_tool
+from .services import listar_servicos_tool
+from .schedule import criar_agendamento_tool, listar_agendamentos_tool
 
 TOOLS = [
     {
@@ -22,7 +22,7 @@ TOOLS = [
             },
             "required": [],
         },
-        "py_fn": listar_profissionais,
+        "py_fn": listar_profissionais_tool,
     },
     {
         "name": "listar_servicos_profissional",
@@ -47,7 +47,7 @@ TOOLS = [
             },
             "required": ["profissionalId"],
         },
-        "py_fn": listar_servicos_profissional,
+        "py_fn": listar_servicos_profissional_tool,
     },
     {
         "name": "listar_servicos",
@@ -70,7 +70,7 @@ TOOLS = [
             },
             "required": [],
         },
-        "py_fn": listar_servicos,
+        "py_fn": listar_servicos_tool,
     },
     {
         "name": "criar_agendamento",
@@ -79,7 +79,6 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "servicoId": {"type": "integer", "description": "ID do serviço."},
-                "clienteId": {"type": "integer", "description": "ID do cliente."},
                 "profissionalId": {"type": "integer", "description": "ID do profissional."},
                 "dataHoraInicio": {
                     "type": "string",
@@ -104,7 +103,6 @@ TOOLS = [
             },
             "required": [
                 "servicoId",
-                "clienteId",
                 "profissionalId",
                 "dataHoraInicio",
                 "duracaoEmMinutos",
@@ -113,7 +111,7 @@ TOOLS = [
                 "confirmado",
             ],
         },
-        "py_fn": criar_agendamento,
+        "py_fn": criar_agendamento_tool,
     },
     {
         "name": "listar_agendamentos",
@@ -136,6 +134,6 @@ TOOLS = [
             },
             "required": ["dataInicio", "dataFim"],
         },
-        "py_fn": listar_agendamentos,
+        "py_fn": listar_agendamentos_tool,
     },
 ]
